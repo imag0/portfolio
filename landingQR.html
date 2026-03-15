@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>...</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400&display=swap');
+
+  *{margin:0;padding:0;box-sizing:border-box}
+
+  :root{
+    --bg:#06080a;
+    --fg:#c8c0a8;
+    --dim:#c8c0a822;
+    --glow:#c8c0a80a;
+  }
+
+  html,body{
+    height:100%;overflow:hidden;
+    background:var(--bg);
+    font-family:'JetBrains Mono',monospace;
+    color:var(--fg);
+    cursor:crosshair;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  body{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  /* ── Noise ── */
+  body::before{
+    content:'';position:fixed;inset:0;z-index:200;
+    pointer-events:none;opacity:0.06;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:noiseShift 0.15s steps(3) infinite;
+  }
+
+  @keyframes noiseShift{
+    0%{transform:translate(0,0)}
+    33%{transform:translate(-2px,1px)}
+    66%{transform:translate(1px,-1px)}
+    100%{transform:translate(0,0)}
+  }
+
+  /* ── Scanlines ── */
+  body::after{
+    content:'';position:fixed;inset:0;z-index:199;
+    pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,transparent,transparent 1px,
+      rgba(0,0,0,0.2) 1px,rgba(0,0,0,0.2) 3px
+    );
+  }
+
+  /* ── Vignette ── */
+  .vignette{
+    position:fixed;inset:0;z-index:198;
+    pointer-events:none;
+    box-shadow:inset 0 0 250px rgba(0,0,0,0.92);
+  }
+
+  /* ── Horizontal glitch bar ── */
+  .glitch-bar{
+    position:fixed;
+    left:0;right:0;
+    height:2px;
+    background:var(--fg);
+    opacity:0;
+    z-index:300;
+    pointer-events:none;
+    animation:glitchBar 8s linear infinite;
+  }
+
+  @keyframes glitchBar{
+    0%,100%{opacity:0;top:20%}
+    2%{opacity:0.08;top:20%}
+    2.5%{opacity:0;top:20%}
+    45%{opacity:0;top:73%}
+    46%{opacity:0.06;top:73%}
+    46.5%{opacity:0;top:73%}
+    78%{opacity:0;top:45%}
+    78.5%{opacity:0.1;top:45%;height:4px}
+    79.5%{opacity:0;top:45%}
+  }
+
+  /* ── Container ── */
+  .c{
+    display:flex;flex-direction:column;align-items:center;
+    position:relative;z-index:10;
+    padding:2rem;
+    animation:containerIn 2s ease both;
+  }
+
+  @keyframes containerIn{
+    0%{opacity:0;filter:blur(8px) brightness(3)}
+    30%{opacity:0.5;filter:blur(0) brightness(1.5)}
+    50%{opacity:0.2;filter:blur(2px) brightness(0.8)}
+    100%{opacity:1;filter:blur(0) brightness(1)}
+  }
+
+  /* ── Eye SVG ── */
+  .eye{
+    width:140px;height:140px;
+    position:relative;
+    margin-bottom:4rem;
+  }
+
+  .eye svg{width:100%;height:100%;overflow:visible}
+
+  .eye-stroke{
+    fill:none;stroke:var(--fg);
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  }
+
+  .eye-fill{fill:var(--fg);stroke:none}
+
+  .eye-lids{
+    transform-origin:50% 50%;
+    animation:eyeReveal 2.5s cubic-bezier(.16,1,.3,1) 0.8s both,
+              idleBlink 6s ease 4s infinite;
+  }
+
+  @keyframes eyeReveal{
+    0%{transform:scaleY(0);opacity:0}
+    25%{transform:scaleY(1.1);opacity:0.6}
+    35%{transform:scaleY(0.04)}
+    50%{transform:scaleY(1);opacity:1}
+    62%{transform:scaleY(0.06)}
+    75%{transform:scaleY(1)}
+    100%{transform:scaleY(1);opacity:1}
+  }
+
+  @keyframes idleBlink{
+    0%,100%{transform:scaleY(1)}
+    48%{transform:scaleY(1)}
+    50%{transform:scaleY(0.05)}
+    53%{transform:scaleY(1)}
+  }
+
+  .iris{
+    transform-origin:50% 50%;
+    animation:irisLook 10s ease-in-out 3.5s infinite;
+  }
+
+  @keyframes irisLook{
+    0%,100%{transform:translateX(0)}
+    15%{transform:translateX(6px)}
+    25%{transform:translateX(6px)}
+    40%{transform:translateX(-4px)}
+    55%{transform:translateX(-4px)}
+    70%{transform:translateX(2px)}
+    80%{transform:translateX(0)}
+  }
+
+  .eye::after{
+    content:'';
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    width:80px;height:40px;
+    background:radial-gradient(ellipse,rgba(200,192,168,0.04) 0%,transparent 70%);
+    border-radius:50%;
+    animation:ambientGlow 5s ease-in-out 3s infinite;
+  }
+
+  @keyframes ambientGlow{
+    0%,100%{opacity:0.3;transform:translate(-50%,-50%) scale(1)}
+    50%{opacity:0.8;transform:translate(-50%,-50%) scale(1.4)}
+  }
+
+  /* ── Corrupted text fragments ── */
+  .frag{
+    font-size:0.55rem;
+    font-weight:300;
+    letter-spacing:0.4em;
+    text-transform:uppercase;
+    opacity:0;
+    text-align:center;
+    line-height:2.4;
+    position:relative;
+  }
+
+  .frag.f1{animation:fragIn 0.8s ease 2.8s both}
+  .frag.f2{animation:fragIn 0.8s ease 3.6s both}
+  .frag.f3{animation:fragIn 0.8s ease 4.4s both}
+
+  @keyframes fragIn{
+    0%{opacity:0;transform:translateY(4px);letter-spacing:0.8em}
+    60%{opacity:0.5}
+    100%{opacity:1;transform:translateY(0);letter-spacing:0.4em}
+  }
+
+  .frag .redact{
+    background:var(--fg);
+    color:var(--fg);
+    padding:0 0.3em;
+    font-size:0.5rem;
+    animation:redactFlicker 4s steps(1) infinite;
+  }
+
+  @keyframes redactFlicker{
+    0%,100%{background:var(--fg);color:var(--fg)}
+    92%{background:var(--fg);color:var(--fg)}
+    93%{background:transparent;color:var(--fg)}
+    95%{background:var(--fg);color:var(--fg)}
+  }
+
+  .frag .corrupt{
+    opacity:0.15;
+    font-size:0.45rem;
+    letter-spacing:0.1em;
+  }
+
+  .frag .dim{opacity:0.25}
+
+  /* ── The entry point ── */
+  .entry{
+    margin-top:3.5rem;
+    opacity:0;
+    animation:entryIn 1s ease 5.2s both;
+  }
+
+  @keyframes entryIn{
+    0%{opacity:0;transform:translateY(8px)}
+    100%{opacity:1;transform:translateY(0)}
+  }
+
+  .entry a{
+    display:inline-flex;
+    align-items:center;
+    gap:0.5rem;
+    text-decoration:none;
+    color:var(--fg);
+    font-size:0.55rem;
+    font-weight:300;
+    letter-spacing:0.35em;
+    text-transform:uppercase;
+    padding:0.6rem 1.4rem;
+    border:1px solid var(--dim);
+    position:relative;
+    overflow:hidden;
+    transition:all 0.6s cubic-bezier(.16,1,.3,1);
+  }
+
+  .entry a::before{
+    content:'';position:absolute;inset:0;
+    background:var(--fg);
+    transform:scaleX(0);
+    transform-origin:left;
+    transition:transform 0.4s cubic-bezier(.16,1,.3,1);
+    z-index:0;
+  }
+
+  .entry a:hover::before{transform:scaleX(1)}
+  .entry a:hover{color:var(--bg);border-color:var(--fg)}
+
+  .entry a span{position:relative;z-index:1}
+
+  .entry a .arrow{
+    position:relative;z-index:1;
+    transition:transform 0.3s ease;
+    font-size:0.7rem;
+    line-height:1;
+  }
+
+  .entry a:hover .arrow{transform:translateX(4px)}
+
+  .entry-cursor{
+    display:inline-block;
+    width:5px;height:11px;
+    background:var(--fg);
+    opacity:0.3;
+    margin-left:1rem;
+    vertical-align:middle;
+    animation:cursorBlink 1.1s step-end infinite;
+  }
+
+  @keyframes cursorBlink{
+    0%,100%{opacity:0.3}
+    50%{opacity:0}
+  }
+
+  /* ── Scattered data fragments (background) ── */
+  .bg-data{
+    position:fixed;
+    font-size:0.45rem;
+    font-weight:300;
+    letter-spacing:0.15em;
+    color:var(--fg);
+    opacity:0;
+    pointer-events:none;
+    z-index:5;
+    animation:bgDataIn 2s ease both;
+  }
+
+  @keyframes bgDataIn{
+    0%{opacity:0}
+    100%{opacity:var(--o,0.04)}
+  }
+
+  .bg-data.d1{top:12%;left:8%;--o:0.04;animation-delay:4s;transform:rotate(-2deg)}
+  .bg-data.d2{top:78%;right:6%;--o:0.03;animation-delay:5s;transform:rotate(1deg)}
+  .bg-data.d3{top:25%;right:12%;--o:0.025;animation-delay:6s}
+  .bg-data.d4{bottom:18%;left:5%;--o:0.03;animation-delay:5.5s;transform:rotate(-1deg)}
+  .bg-data.d5{top:55%;left:4%;--o:0.02;animation-delay:7s}
+
+  /* ── Bottom identifier ── */
+  .sys-id{
+    position:fixed;
+    bottom:1.2rem;
+    left:50%;transform:translateX(-50%);
+    font-size:0.5rem;
+    font-weight:300;
+    letter-spacing:0.3em;
+    opacity:0;
+    z-index:10;
+    animation:sysIn 1s ease 6s both;
+  }
+
+  @keyframes sysIn{from{opacity:0}to{opacity:0.1}}
+
+  /* ── Edge ticks ── */
+  .tick{
+    position:fixed;
+    background:var(--fg);
+    opacity:0;
+    z-index:10;
+    animation:tickIn 1s ease both;
+  }
+
+  .tick.h{width:12px;height:1px}
+  .tick.v{width:1px;height:12px}
+
+  .tick.t1{top:2rem;left:2rem;animation-delay:5.5s}
+  .tick.t2{top:2rem;right:2rem;animation-delay:5.7s}
+  .tick.t3{bottom:2rem;left:2rem;animation-delay:5.9s}
+  .tick.t4{bottom:2rem;right:2rem;animation-delay:6.1s}
+  .tick.t5{top:calc(2rem + 1px);left:2rem;width:1px;height:12px;animation-delay:5.5s}
+  .tick.t6{top:calc(2rem + 1px);right:2rem;width:1px;height:12px;animation-delay:5.7s}
+  .tick.t7{bottom:calc(2rem + 1px);left:2rem;width:1px;height:12px;animation-delay:5.9s}
+  .tick.t8{bottom:calc(2rem + 1px);right:2rem;width:1px;height:12px;animation-delay:6.1s}
+
+  @keyframes tickIn{from{opacity:0}to{opacity:0.06}}
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div class="glitch-bar"></div>
+
+<!-- Corner ticks -->
+<div class="tick h t1"></div>
+<div class="tick h t2"></div>
+<div class="tick h t3"></div>
+<div class="tick h t4"></div>
+<div class="tick h t5"></div>
+<div class="tick h t6"></div>
+<div class="tick h t7"></div>
+<div class="tick h t8"></div>
+
+<!-- Background data fragments -->
+<div class="bg-data d1">0x4E 0x41 0x56</div>
+<div class="bg-data d2">sig::verify(hw_id) → OK</div>
+<div class="bg-data d3">53.4285°N 14.5528°E</div>
+<div class="bg-data d4">heading_offset: +2.7°</div>
+<div class="bg-data d5">sector 7G [WARN]</div>
+
+<div class="c">
+
+  <!-- Eye -->
+  <div class="eye">
+    <svg viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+      <g class="eye-lids">
+        <path class="eye-stroke" d="M8,60 Q38,10 100,8 Q162,10 192,60"/>
+        <path class="eye-stroke" d="M8,60 Q38,110 100,112 Q162,110 192,60"/>
+        <path class="eye-stroke" style="stroke-width:1.2;opacity:0.35" d="M22,58 Q48,22 100,18 Q152,22 178,58"/>
+        <circle class="eye-stroke" cx="100" cy="60" r="30" style="stroke-width:2"/>
+        <g class="iris">
+          <circle class="eye-fill" cx="100" cy="60" r="13"/>
+          <line class="eye-stroke" x1="100" y1="45" x2="100" y2="50" style="stroke-width:1.6"/>
+          <line class="eye-stroke" x1="100" y1="70" x2="100" y2="75" style="stroke-width:1.6"/>
+          <line class="eye-stroke" x1="85" y1="60" x2="90" y2="60" style="stroke-width:1.6"/>
+          <line class="eye-stroke" x1="110" y1="60" x2="115" y2="60" style="stroke-width:1.6"/>
+          <line class="eye-stroke" x1="89.4" y1="49.4" x2="92.5" y2="52.5" style="stroke-width:1.3"/>
+          <line class="eye-stroke" x1="110.6" y1="49.4" x2="107.5" y2="52.5" style="stroke-width:1.3"/>
+          <line class="eye-stroke" x1="89.4" y1="70.6" x2="92.5" y2="67.5" style="stroke-width:1.3"/>
+          <line class="eye-stroke" x1="110.6" y1="70.6" x2="107.5" y2="67.5" style="stroke-width:1.3"/>
+          <circle cx="100" cy="60" r="4.5" fill="var(--bg)"/>
+          <circle class="eye-fill" cx="100" cy="60" r="1.8"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Text fragments -->
+  <div class="frag f1">
+    <span class="dim">status:</span> observing
+  </div>
+
+  <div class="frag f2">
+    clearance level <span class="redact">REDACTED</span> required
+  </div>
+
+  <div class="frag f3">
+    <span class="corrupt">4e6176 5369676874 2e65786500</span>
+  </div>
+
+  <!-- Entry -->
+  <div class="entry">
+    <a href="https://t.me/echlon_bot" target="_blank" rel="noopener">
+      <span>proceed</span>
+      <span class="arrow">→</span>
+    </a>
+    <span class="entry-cursor"></span>
+  </div>
+
+</div>
+
+<div class="sys-id">ECHLON // 2025</div>
+
+</body>
+</html>
