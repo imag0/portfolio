@@ -111,7 +111,9 @@ export default function Success() {
           </Link>
 
           <a
-            href="mailto:echlondev@gmail.com"
+            href="https://t.me/echlon_bot"
+            target="_blank"
+            rel="noopener noreferrer"
             className="px-8 py-3 border border-[#FF003C] text-[#FF003C] hover:bg-[#FF003C] hover:text-black transition-all shadow-[0_0_15px_rgba(255,0,60,0.2)] hover:shadow-[0_0_25px_rgba(255,0,60,0.6)] rounded-sm uppercase tracking-widest font-bold font-mono text-sm relative group overflow-hidden"
           >
             <span className="relative z-10">Support</span>
