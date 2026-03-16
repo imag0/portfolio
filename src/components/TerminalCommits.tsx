@@ -48,14 +48,14 @@ export function TerminalCommits() {
     }, [commits]);
 
     return (
-        <div className="w-full max-w-2xl mx-auto rounded-lg overflow-hidden border border-[#333] bg-[#050608] shadow-lg shadow-[#00F0FF]/10 z-10 relative">
-            <div className="flex items-center px-4 py-2 bg-[#1A1A1A] border-b border-[#333]">
+        <div className="w-full max-w-2xl mx-auto rounded-sm overflow-hidden border border-[#c8c0a822] bg-[#06080a] shadow-lg z-10 relative">
+            <div className="flex items-center px-4 py-2 bg-[#050608] border-b border-[#c8c0a822]">
                 <div className="flex space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-[#FF003C]"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    <div className="w-3 h-3 rounded-full bg-[#c8c0a8]/40"></div>
+                    <div className="w-3 h-3 rounded-full bg-[#c8c0a8]/40"></div>
+                    <div className="w-3 h-3 rounded-full bg-[#c8c0a8]/40"></div>
                 </div>
-                <div className="mx-auto text-xs text-gray-400 font-mono">echlon@sys:~</div>
+                <div className="mx-auto text-xs text-[#c8c0a8]/60 font-mono">echlon@sys:~</div>
             </div>
             <div
                 ref={scrollRef}
@@ -70,17 +70,17 @@ export function TerminalCommits() {
                             transition={{ duration: 0.3 }}
                             className="flex font-mono"
                         >
-                            <span className="text-[#00F0FF] mr-4 shrink-0">
+                            <span className="text-[#c8c0a8]/80 mr-4 shrink-0">
                                 {new Date(commit.time).toLocaleTimeString([], { hour12: false })}
                             </span>
-                            <span className="text-[#00F0FF] opacity-50 mr-2 shrink-0">~</span>
-                            <span className="text-gray-300">git commit -m "{commit.text}"</span>
+                            <span className="text-[#c8c0a8]/60 mr-2 shrink-0">~</span>
+                            <span className="text-[#c8c0a8]/70">git commit -m "{commit.text}"</span>
                         </motion.div>
                     ))}
                 </AnimatePresence>
                 <div className="flex font-mono mt-2 animate-pulse">
-                    <span className="text-[#00F0FF] mr-2">echlon@sys:~ $</span>
-                    <span className="w-2 h-4 bg-[#00F0FF] inline-block translate-y-0.5 shadow-[0_0_8px_#00F0FF]"></span>
+                    <span className="text-[#c8c0a8]/80 mr-2">echlon@sys:~ $</span>
+                    <span className="w-2 h-4 bg-[#c8c0a8] inline-block translate-y-0.5"></span>
                 </div>
             </div>
         </div>

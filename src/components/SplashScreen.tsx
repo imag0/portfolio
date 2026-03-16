@@ -7,16 +7,16 @@ import { useGSAP } from '@gsap/react';
 import { AnimatedLogo, AnimatedLogoRef } from './AnimatedLogo';
 
 const bootSequence = [
-    "bios: init memory... [OK]",
-    "bios: loading kernel... [OK]",
-    "sys: mounting root fs... [OK]",
-    "sys: starting core services... [OK]",
-    "net: probing interfaces... eth0 [UP]",
-    "net: connecting to echlon network...",
-    "auth: initializing cryptographic protocols...",
-    "warn: undefined behaviour detected in sector 7G",
-    "sys: ignoring warnings, full speed ahead.",
-    "echlon_sys: loading classified ocular interface...",
+    "sys: initializing core systems...",
+    "sec: loading cryptographic keys... [OK]",
+    "mem: memory integrity check... [PASS]",
+    "disk: verifying filesystem signatures...",
+    "auth: biometric authentication...",
+    "archive: decrypting data vaults...",
+    "verify: checking digital signatures... [VERIFIED]",
+    "secure: consensus mechanism active",
+    "sys: initializing classified interface...",
+    "status: neural link established",
     "echlon_sys: READY."
 ];
 
@@ -92,16 +92,16 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
     return (
         <div
             ref={container}
-            className="fixed inset-0 z-[100] bg-[#050608] flex items-center justify-center overflow-hidden h-screen w-screen"
+            className="fixed inset-0 z-[100] bg-[#06080a] flex items-center justify-center overflow-hidden h-screen w-screen"
         >
             {/* Terminal Logs (Behind the eye) */}
-            <div className="absolute inset-0 p-8 pt-24 pl-12 md:pl-24 z-0 font-mono text-xs md:text-sm text-[#00F0FF]/60 flex flex-col justify-center max-w-2xl opacity-80 pointer-events-none">
+            <div className="absolute inset-0 p-8 pt-24 pl-12 md:pl-24 z-0 font-mono text-xs md:text-sm text-[#c8c0a8] flex flex-col justify-center max-w-2xl opacity-90 pointer-events-none">
                 {logs.map((log, i) => (
                     <motion.div
                         key={i}
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
-                        className={`mt-1 ${log?.includes('warn') ? 'text-[#FF003C]' : log?.includes('READY') ? 'text-white' : ''}`}
+                        className={`mt-1 ${log?.includes('READY') ? 'text-[#c8c0a8] font-bold' : log?.includes('[') ? 'text-[#00c853]' : ''}`}
                     >
                         <span className="opacity-50 mr-2">{'>'}</span>{log}
                     </motion.div>
@@ -112,17 +112,17 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
             </div>
 
             {/* The Eye */}
-            <div className="relative z-10 w-48 h-48 md:w-64 md:h-64 flex items-center justify-center drop-shadow-[0_0_30px_rgba(0,240,255,0.4)]">
+            <div className="relative z-10 w-48 h-48 md:w-64 md:h-64 flex items-center justify-center drop-shadow-[0_0_30px_rgba(200,192,168,0.3)]">
                 <AnimatedLogo
                     ref={logoRef}
                     startClosed={true}
-                    className="w-full h-full text-[#00F0FF] brightness-150 saturate-200"
-                    style={{ '--eye-bg': '#050608' } as React.CSSProperties} // Keep the sclera black to hide terminal logs
+                    className="w-full h-full text-[#c8c0a8] brightness-100"
+                    style={{ '--eye-bg': '#06080a' } as React.CSSProperties} // Keep the sclera to match background
                 />
             </div>
 
             {/* Global Vignette for the splash */}
-            <div className="absolute inset-0 pointer-events-none z-20 shadow-[inset_0_0_150px_rgba(0,0,0,0.9)]"></div>
+            <div className="absolute inset-0 pointer-events-none z-20 shadow-[inset_0_0_250px_rgba(0,0,0,0.92)]"></div>
         </div>
     );
 }
