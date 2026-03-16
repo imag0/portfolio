@@ -377,12 +377,12 @@ export default function Success() {
           <div className="entry">
             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
               <a href="/">
-                <span>return_home</span>
+                <span>portfolio</span>
                 <span className="arrow">→</span>
               </a>
               <span style={{ opacity: 0.3 }}>|</span>
               <a href="https://t.me/echlon_bot" target="_blank" rel="noopener noreferrer">
-                <span>return_to_origin</span>
+                <span>return to bot</span>
                 <span className="arrow">→</span>
               </a>
             </div>
