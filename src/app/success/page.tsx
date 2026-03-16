@@ -375,10 +375,17 @@ export default function Success() {
 
           {/* Entry */}
           <div className="entry">
-            <a href="/">
-              <span>return</span>
-              <span className="arrow">→</span>
-            </a>
+            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+              <a href="/">
+                <span>return_home</span>
+                <span className="arrow">→</span>
+              </a>
+              <span style={{ opacity: 0.3 }}>|</span>
+              <a href="https://t.me/echlon_bot" target="_blank" rel="noopener noreferrer">
+                <span>return_to_origin</span>
+                <span className="arrow">→</span>
+              </a>
+            </div>
             <span className="entry-cursor"></span>
           </div>
         </div>
