@@ -216,6 +216,7 @@ export default function Success() {
           .entry a{
             display:inline-flex;
             align-items:center;
+            justify-content:center;
             gap:0.5rem;
             text-decoration:none;
             color:var(--fg);
@@ -228,6 +229,7 @@ export default function Success() {
             position:relative;
             overflow:hidden;
             transition:all 0.6s cubic-bezier(.16,1,.3,1);
+            white-space:nowrap;
           }
 
           .entry a::before{
