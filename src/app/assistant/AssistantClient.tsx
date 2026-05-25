@@ -86,6 +86,7 @@ function matches(task: Task, query: string, officer: string, chapter: string, st
 
 export function AssistantClient() {
   const [unlocked, setUnlocked] = useState(false);
+  const [username, setUsername] = useState("ayomi");
   const [password, setPassword] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [query, setQuery] = useState("");
@@ -130,7 +131,7 @@ export function AssistantClient() {
       const response = await fetch("/api/assistant-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       if (!response.ok) throw new Error((await response.json()).error ?? "Nie udało się zalogować.");
       window.localStorage.setItem(unlockKey, "true");
@@ -224,13 +225,22 @@ export function AssistantClient() {
           </p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight">Logowanie</h1>
           <label className="mt-5 grid gap-2 text-sm font-semibold">
+            Login
+            <input
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              className="rounded border border-[#c9c0b3] px-3 py-2 font-normal"
+              autoFocus
+            />
+          </label>
+          <label className="mt-5 grid gap-2 text-sm font-semibold">
             Hasło
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="rounded border border-[#c9c0b3] px-3 py-2 font-normal"
-              autoFocus
             />
           </label>
           <button className="mt-4 w-full rounded bg-[#31513d] px-4 py-3 font-semibold text-white hover:bg-[#263f30]" disabled={loggingIn}>

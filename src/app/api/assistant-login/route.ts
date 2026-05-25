@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 
 const apiUrl = process.env.SPR_API_URL ?? "http://yasmin208.mikrus.xyz:20208";
 const apiToken = process.env.SPR_API_TOKEN;
+const assistantUser = process.env.ASSISTANT_USER ?? "ayomi";
 const assistantPassword = process.env.ASSISTANT_PASSWORD ?? apiToken;
 
 export async function POST(request: NextRequest) {
@@ -9,8 +10,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "Assistant login is not configured." }, { status: 500 });
   }
 
-  const body = await request.json().catch(() => ({})) as { password?: string };
-  if (body.password !== assistantPassword) {
+  const body = await request.json().catch(() => ({})) as { username?: string; password?: string };
+  if (body.username !== assistantUser || body.password !== assistantPassword) {
     return Response.json({ error: "Nieprawidłowe hasło." }, { status: 401 });
   }
 
