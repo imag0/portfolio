@@ -17,17 +17,13 @@ const defaultCommits = [
 ];
 
 export function TerminalCommits() {
-    const [commits, setCommits] = useState<{ id: string; text: string; time: string }[]>([]);
+    const [commits, setCommits] = useState<{ id: string; text: string; time: string }[]>(() => [
+        { id: 'initial-1', text: "init framework", time: new Date(Date.now() - 60000).toISOString() },
+        { id: 'initial-2', text: "added stupid shit", time: new Date(Date.now() - 30000).toISOString() },
+    ]);
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // initialize with a few commits
-        const initialCommits = [
-            { id: 'initial-1', text: "init framework", time: new Date(Date.now() - 60000).toISOString() },
-            { id: 'initial-2', text: "added stupid shit", time: new Date(Date.now() - 30000).toISOString() },
-        ];
-        setCommits(initialCommits);
-
         const intervalId = setInterval(() => {
             const newCommit = {
                 id: Math.random().toString(36).substring(7),
@@ -74,7 +70,7 @@ export function TerminalCommits() {
                                 {new Date(commit.time).toLocaleTimeString([], { hour12: false })}
                             </span>
                             <span className="text-[#c8c0a8]/60 mr-2 shrink-0">~</span>
-                            <span className="text-[#c8c0a8]/70">git commit -m "{commit.text}"</span>
+                            <span className="text-[#c8c0a8]/70">git commit -m &quot;{commit.text}&quot;</span>
                         </motion.div>
                     ))}
                 </AnimatePresence>

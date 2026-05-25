@@ -1,7 +1,6 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { GlitchText } from "@/components/GlitchText";
 import { ProjectCard } from "@/components/ProjectCard";
 import { TerminalCommits } from "@/components/TerminalCommits";
 import { AnimatedLogo } from "@/components/AnimatedLogo";
@@ -155,10 +154,10 @@ export default function Home() {
               <span className="opacity-50">All Rights Reserved</span>
             </p>
             <a
-              href="mailto:echlondev@gmail.com"
+              href="/assistant"
               className="mt-4 md:mt-0 hover:text-[#c8c0a8] transition-colors relative group"
             >
-              echlondev@gmail.com
+              asystent praktyki morskiej
               <div className="absolute bottom-0 left-0 w-full h-[1px] bg-[#c8c0a8] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </a>
           </footer>

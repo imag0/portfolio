@@ -1,18 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
 
 export default function Success() {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
   return (
     <html lang="en">
       <head>
@@ -45,31 +35,6 @@ export default function Success() {
             display:flex;
             align-items:center;
             justify-content:center;
-          }
-
-          /* ── Noise ── */
-          body::before{
-            content:'';position:fixed;inset:0;z-index:200;
-            pointer-events:none;opacity:0.06;
-            background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-            animation:noiseShift 0.15s steps(3) infinite;
-          }
-
-          @keyframes noiseShift{
-            0%{transform:translate(0,0)}
-            33%{transform:translate(-2px,1px)}
-            66%{transform:translate(1px,-1px)}
-            100%{transform:translate(0,0)}
-          }
-
-          /* ── Scanlines ── */
-          body::after{
-            content:'';position:fixed;inset:0;z-index:199;
-            pointer-events:none;
-            background:repeating-linear-gradient(
-              to bottom,transparent,transparent 1px,
-              rgba(0,0,0,0.2) 1px,rgba(0,0,0,0.2) 3px
-            );
           }
 
           /* ── Vignette ── */
@@ -378,10 +343,10 @@ export default function Success() {
           {/* Entry */}
           <div className="entry">
             <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-              <a href="/">
+              <Link href="/">
                 <span>portfolio</span>
                 <span className="arrow">→</span>
-              </a>
+              </Link>
               <span style={{ opacity: 0.3 }}>|</span>
               <a href="https://t.me/echlon_bot" target="_blank" rel="noopener noreferrer">
                 <span>return to bot</span>

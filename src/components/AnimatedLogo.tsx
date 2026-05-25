@@ -21,14 +21,6 @@ export const AnimatedLogo = forwardRef<AnimatedLogoRef, AnimatedLogoProps>(
         const blinkTl = useRef<gsap.core.Timeline>(null);
         const maskId = React.useId();
 
-        useGSAP(() => {
-            if (startClosed && eyeGroup.current) {
-                gsap.set(eyeGroup.current, { scaleY: 0.1, transformOrigin: "50% 50%" });
-            } else if (!startClosed) {
-                startBlinkingAnim();
-            }
-        }, { scope: container });
-
         const startBlinkingAnim = () => {
             if (blinkTl.current) blinkTl.current.kill();
 
@@ -54,6 +46,14 @@ export const AnimatedLogo = forwardRef<AnimatedLogoRef, AnimatedLogoProps>(
 
             createBlink();
         };
+
+        useGSAP(() => {
+            if (startClosed && eyeGroup.current) {
+                gsap.set(eyeGroup.current, { scaleY: 0.1, transformOrigin: "50% 50%" });
+            } else if (!startClosed) {
+                startBlinkingAnim();
+            }
+        }, { scope: container });
 
         useImperativeHandle(ref, () => ({
             playIntro: (onComplete) => {

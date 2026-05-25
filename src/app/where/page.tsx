@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from "react";
 
 export default function EarningsTrackerPage() {
-    const [mounted, setMounted] = useState(false);
     const [now, setNow] = useState(new Date());
 
     // Static Contract Data
@@ -23,7 +22,6 @@ export default function EarningsTrackerPage() {
     }), []);
 
     useEffect(() => {
-        setMounted(true);
         const timer = setInterval(() => setNow(new Date()), 1000);
         return () => clearInterval(timer);
     }, []);
@@ -77,15 +75,13 @@ export default function EarningsTrackerPage() {
         };
     }, [now, CONTRACT, MONTHLY]);
 
-    if (!mounted) return null;
-
     const fmt = (n: number, long = true) => {
         const prefix = long ? '$ ' : '$';
         return prefix + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
     return (
-        <div className="noise-layer scanlines-layer min-h-screen bg-[#06080a] selection:bg-[#c8c0a833] selection:text-[#c8c0a8]">
+        <div className="min-h-screen bg-[#06080a] selection:bg-[#c8c0a833] selection:text-[#c8c0a8]">
             <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&display=swap');
 
@@ -113,21 +109,6 @@ export default function EarningsTrackerPage() {
           position: fixed; inset: 0; z-index: 1;
           background-image: linear-gradient(var(--dim) 1px, transparent 1px), linear-gradient(90deg, var(--dim) 1px, transparent 1px);
           background-size: 40px 40px; pointer-events: none; opacity: 0.15;
-        }
-
-        .noise-layer::before {
-          content: ''; position: fixed; inset: 0; z-index: 200;
-          pointer-events: none; opacity: 0.05;
-          background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-          animation: noiseShift 0.15s steps(3) infinite;
-        }
-
-        @keyframes noiseShift { 0%{transform:translate(0,0)} 33%{transform:translate(-2px,1px)} 66%{transform:translate(1px,-1px)} 100%{transform:translate(0,0)} }
-
-        .scanlines-layer::after {
-          content: ''; position: fixed; inset: 0; z-index: 199;
-          pointer-events: none;
-          background: repeating-linear-gradient(to bottom, transparent, transparent 1px, rgba(0,0,0,0.2) 1px, rgba(0,0,0,0.2) 3px);
         }
 
         .vignette { position: fixed; inset: 0; z-index: 198; pointer-events: none; box-shadow: inset 0 0 300px rgba(0,0,0,0.9); }

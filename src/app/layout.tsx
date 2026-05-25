@@ -27,8 +27,6 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-dark text-foreground min-h-screen relative`}
       >
-        <div className="noise"></div>
-        <div className="scanlines"></div>
         {children}
       </body>
     </html>
