@@ -88,6 +88,9 @@ export default function Home() {
                   <span className="relative z-10">Initialize</span>
                   <div className="absolute inset-0 h-full w-full bg-[#c8c0a8] -translate-x-full group-hover:translate-x-0 transition-transform duration-300 ease-out z-0"></div>
                 </a>
+                <a href="/assistant" className="px-6 py-3 border border-[#c8c0a822] text-[#c8c0a8]/75 hover:border-[#c8c0a8] hover:text-[#c8c0a8] transition-all rounded-sm uppercase tracking-widest font-bold">
+                  Assistant
+                </a>
               </motion.div>
             </motion.div>
           </section>
