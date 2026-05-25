@@ -77,12 +77,10 @@ export default function AssistantPage() {
 
           <div className="mt-10 flex flex-wrap gap-3">
             <a
-              href="https://asystent-praktyki-morskiej.vercel.app"
-              target="_blank"
-              rel="noreferrer"
+              href="mailto:echlondev@gmail.com?subject=Assistant%20console%20access"
               className="group inline-flex items-center gap-2 bg-[#c8c0a8] px-5 py-3 font-mono text-sm font-bold uppercase tracking-[0.2em] text-black transition hover:bg-white"
             >
-              open console
+              request console
               <ArrowUpRight className="h-4 w-4 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </a>
             <a
