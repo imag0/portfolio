@@ -197,9 +197,26 @@ export function AssistantClient() {
     setUploadProgress(0);
     setMessage(`Wgrywanie oryginalnego pliku: ${file.name}`);
 
+    let uploadUrl = `/api/assistant/tasks/${taskId}/files`;
+    try {
+      const ticket = await fetch("/api/assistant-upload-ticket", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, fileName: file.name, mimeType: file.type, size: file.size }),
+      });
+      if (ticket.ok) {
+        const payload = await ticket.json() as { uploadUrl?: string };
+        if (payload.uploadUrl && (window.location.protocol === "http:" || payload.uploadUrl.startsWith("https:"))) {
+          uploadUrl = payload.uploadUrl;
+        }
+      }
+    } catch {
+      // Fall back to the same-origin proxy when a direct VPS upload ticket is unavailable.
+    }
+
     await new Promise<void>((resolve) => {
       const request = new XMLHttpRequest();
-      request.open("POST", `/api/assistant/tasks/${taskId}/files`);
+      request.open("POST", uploadUrl);
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
       };
@@ -211,6 +228,7 @@ export function AssistantClient() {
           return;
         }
         const uploaded = JSON.parse(request.responseText) as FileItem;
+        uploaded.url = `/api/assistant/files/${uploaded.id}`;
         setTasks((current) => current.map((task) => task.id === taskId ? { ...task, uploadedFiles: [uploaded, ...task.uploadedFiles] } : task));
         setMessage(`Wgrano bez kompresji: ${uploaded.originalName}`);
         resolve();

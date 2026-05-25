@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { setAssistantSession } from "../assistant-auth";
 
 const apiUrl = process.env.SPR_API_URL ?? "http://yasmin208.mikrus.xyz:20208";
 const apiToken = process.env.SPR_API_TOKEN;
@@ -23,5 +24,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "VPS nie odpowiada." }, { status: 502 });
   }
 
+  await setAssistantSession();
   return Response.json({ ok: true });
 }
