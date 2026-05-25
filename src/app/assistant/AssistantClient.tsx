@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
   BadgeCheck,
@@ -12,6 +12,8 @@ import {
   Ship,
   UploadCloud,
 } from "lucide-react";
+
+const unlockKey = "spr-assistant-unlocked";
 
 type FileItem = {
   id: string;
@@ -83,6 +85,8 @@ function matches(task: Task, query: string, officer: string, chapter: string, st
 }
 
 export function AssistantClient() {
+  const [unlocked, setUnlocked] = useState(false);
+  const [password, setPassword] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [query, setQuery] = useState("");
   const [officer, setOfficer] = useState("all");
@@ -91,6 +95,7 @@ export function AssistantClient() {
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState("Ładowanie zadań z VPS...");
   const [loading, setLoading] = useState(true);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -109,8 +114,43 @@ export function AssistantClient() {
   }
 
   useEffect(() => {
-    void load();
+    const isUnlocked = window.localStorage.getItem(unlockKey) === "true";
+    setUnlocked(isUnlocked);
+    if (isUnlocked) void load();
+    else {
+      setLoading(false);
+      setMessage("Zaloguj się, żeby otworzyć asystenta.");
+    }
   }, []);
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoggingIn(true);
+    try {
+      const response = await fetch("/api/assistant-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error ?? "Nie udało się zalogować.");
+      window.localStorage.setItem(unlockKey, "true");
+      setUnlocked(true);
+      setPassword("");
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nie udało się zalogować.");
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  function logout() {
+    window.localStorage.removeItem(unlockKey);
+    setUnlocked(false);
+    setTasks([]);
+    setSelected(null);
+    setMessage("Wylogowano.");
+  }
 
   const filtered = useMemo(
     () => tasks.filter((task) => matches(task, query, officer, chapter, status)),
@@ -174,6 +214,34 @@ export function AssistantClient() {
     }
   }
 
+  if (!unlocked) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-[#f7f4ec] px-4 text-[#17201b]">
+        <form onSubmit={login} className="w-full max-w-sm rounded border border-[#d7d0c4] bg-white p-6 shadow-sm">
+          <p className="flex items-center gap-2 text-sm font-medium text-[#31513d]">
+            <Ship className="h-4 w-4" />
+            Asystent Praktyki Morskiej
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Logowanie</h1>
+          <label className="mt-5 grid gap-2 text-sm font-semibold">
+            Hasło
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="rounded border border-[#c9c0b3] px-3 py-2 font-normal"
+              autoFocus
+            />
+          </label>
+          <button className="mt-4 w-full rounded bg-[#31513d] px-4 py-3 font-semibold text-white hover:bg-[#263f30]" disabled={loggingIn}>
+            {loggingIn ? "Sprawdzanie VPS..." : "Otwórz asystenta"}
+          </button>
+          <p className="mt-4 text-sm text-[#667167]">{message}</p>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#f7f4ec] text-[#17201b]">
       <header className="border-b border-[#d7d0c4] bg-white">
@@ -185,13 +253,18 @@ export function AssistantClient() {
             </p>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight md:text-3xl">Tankowiec olejowy: materiały, pytania, pliki</h1>
           </div>
-          <button
-            onClick={() => void exportMarkdown()}
-            className="inline-flex items-center justify-center gap-2 rounded bg-[#31513d] px-4 py-3 font-semibold text-white hover:bg-[#263f30]"
-          >
-            <Download className="h-4 w-4" />
-            Eksport Markdown
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => void exportMarkdown()}
+              className="inline-flex items-center justify-center gap-2 rounded bg-[#31513d] px-4 py-3 font-semibold text-white hover:bg-[#263f30]"
+            >
+              <Download className="h-4 w-4" />
+              Eksport Markdown
+            </button>
+            <button onClick={logout} className="rounded border border-[#c9c0b3] px-4 py-3 font-semibold text-[#31513d] hover:bg-[#f7f4ec]">
+              Wyloguj
+            </button>
+          </div>
         </div>
       </header>
 
