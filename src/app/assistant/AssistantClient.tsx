@@ -3,14 +3,18 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   BadgeCheck,
   Download,
+  ExternalLink,
   FileText,
   Filter,
   Loader2,
   Search,
   Ship,
+  Trash2,
   UploadCloud,
+  X,
 } from "lucide-react";
 
 const unlockKey = "spr-assistant-unlocked";
@@ -97,6 +101,8 @@ export function AssistantClient() {
   const [message, setMessage] = useState("Ładowanie zadań z VPS...");
   const [loading, setLoading] = useState(true);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [showTaskList, setShowTaskList] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   async function load() {
     setLoading(true);
@@ -188,13 +194,46 @@ export function AssistantClient() {
   async function upload(taskId: string, file: File) {
     const body = new FormData();
     body.append("file", file);
+    setUploadProgress(0);
+    setMessage(`Wgrywanie oryginalnego pliku: ${file.name}`);
+
+    await new Promise<void>((resolve) => {
+      const request = new XMLHttpRequest();
+      request.open("POST", `/api/assistant/tasks/${taskId}/files`);
+      request.upload.onprogress = (event) => {
+        if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
+      };
+      request.onload = () => {
+        setUploadProgress(null);
+        if (request.status < 200 || request.status >= 300) {
+          setMessage(request.responseText || "Nie udało się wgrać pliku.");
+          resolve();
+          return;
+        }
+        const uploaded = JSON.parse(request.responseText) as FileItem;
+        setTasks((current) => current.map((task) => task.id === taskId ? { ...task, uploadedFiles: [uploaded, ...task.uploadedFiles] } : task));
+        setMessage(`Wgrano bez kompresji: ${uploaded.originalName}`);
+        resolve();
+      };
+      request.onerror = () => {
+        setUploadProgress(null);
+        setMessage("Nie udało się wgrać pliku.");
+        resolve();
+      };
+      request.send(body);
+    });
+  }
+
+  async function deleteFile(taskId: string, fileId: string) {
+    const previous = tasks;
+    setTasks((current) => current.map((task) => task.id === taskId ? { ...task, uploadedFiles: task.uploadedFiles.filter((file) => file.id !== fileId) } : task));
     try {
-      const response = await fetch(`/api/assistant/tasks/${taskId}/files`, { method: "POST", body });
+      const response = await fetch(`/api/assistant/files/${fileId}`, { method: "DELETE" });
       if (!response.ok) throw new Error(await response.text());
-      await load();
-      setMessage(`Wgrano plik: ${file.name}`);
+      setMessage("Usunięto plik z VPS.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nie udało się wgrać pliku.");
+      setTasks(previous);
+      setMessage(error instanceof Error ? error.message : "Nie udało się usunąć pliku.");
     }
   }
 
@@ -282,6 +321,7 @@ export function AssistantClient() {
         <p className="mb-4 rounded border border-[#d7d0c4] bg-white px-4 py-3 text-sm text-[#4f5c52]">
           {loading && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
           {message}
+          {uploadProgress !== null && <span className="ml-2 font-semibold">{uploadProgress}%</span>}
         </p>
 
         <section className="grid gap-3 md:grid-cols-4">
@@ -307,7 +347,7 @@ export function AssistantClient() {
         </section>
 
         <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.4fr]">
-          <aside className="max-h-[78vh] overflow-auto rounded border border-[#d7d0c4] bg-white">
+          <aside className={`${showTaskList ? "block" : "hidden"} max-h-[78vh] overflow-auto rounded border border-[#d7d0c4] bg-white lg:block`}>
             <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-[#d7d0c4] bg-white px-4 py-3 font-semibold">
               <Filter className="h-4 w-4" />
               Zadania ({filtered.length})
@@ -316,7 +356,10 @@ export function AssistantClient() {
               {filtered.map((task) => (
                 <button
                   key={task.id}
-                  onClick={() => setSelected(task.id)}
+                  onClick={() => {
+                    setSelected(task.id);
+                    setShowTaskList(false);
+                  }}
                   className={`rounded border p-3 text-left transition ${
                     selectedTask?.id === task.id ? "border-[#31513d] bg-[#edf5ef]" : "border-[#e2dacf] bg-[#fbfaf7] hover:bg-white"
                   }`}
@@ -337,6 +380,9 @@ export function AssistantClient() {
               task={selectedTask}
               onPatch={(patch) => patchTask(selectedTask.id, patch)}
               onUpload={(file) => upload(selectedTask.id, file)}
+              onDeleteFile={(fileId) => deleteFile(selectedTask.id, fileId)}
+              onBack={() => setShowTaskList(true)}
+              showOnMobile={!showTaskList}
             />
           )}
         </section>
@@ -371,10 +417,25 @@ function Select({ value, options, onChange }: { value: string; options: string[]
   );
 }
 
-function TaskDetail({ task, onPatch, onUpload }: { task: Task; onPatch: (patch: Partial<Task>) => Promise<void>; onUpload: (file: File) => Promise<void> }) {
+function TaskDetail({
+  task,
+  onPatch,
+  onUpload,
+  onDeleteFile,
+  onBack,
+  showOnMobile,
+}: {
+  task: Task;
+  onPatch: (patch: Partial<Task>) => Promise<void>;
+  onUpload: (file: File) => Promise<void>;
+  onDeleteFile: (fileId: string) => Promise<void>;
+  onBack: () => void;
+  showOnMobile: boolean;
+}) {
   const [notes, setNotes] = useState(task.userNotes);
   const [draft, setDraft] = useState(task.userDraft);
   const [saving, setSaving] = useState(false);
+  const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
 
   useEffect(() => {
     setNotes(task.userNotes);
@@ -394,7 +455,11 @@ function TaskDetail({ task, onPatch, onUpload }: { task: Task; onPatch: (patch: 
   }
 
   return (
-    <article className="rounded border border-[#d7d0c4] bg-white p-5">
+    <article className={`${showOnMobile ? "block" : "hidden"} rounded border border-[#d7d0c4] bg-white p-5 lg:block`}>
+      <button onClick={onBack} className="mb-4 inline-flex items-center gap-2 rounded border border-[#c9c0b3] px-3 py-2 text-sm font-semibold text-[#31513d] lg:hidden">
+        <ArrowLeft className="h-4 w-4" />
+        Wróć do listy zadań
+      </button>
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
         <div>
           <p className="text-sm font-semibold text-[#31513d]">Rozdział {task.chapter} · {task.section}</p>
@@ -430,7 +495,7 @@ function TaskDetail({ task, onPatch, onUpload }: { task: Task; onPatch: (patch: 
           <textarea className="min-h-36 rounded border border-[#c9c0b3] p-3 font-normal" value={notes} onChange={(event) => setNotes(event.target.value)} />
         </label>
         <label className="grid gap-2 text-sm font-semibold">
-          Szkic użytkownika
+          Opis własny do Worda
           <textarea className="min-h-36 rounded border border-[#c9c0b3] p-3 font-normal" value={draft} onChange={(event) => setDraft(event.target.value)} />
         </label>
       </div>
@@ -448,6 +513,7 @@ function TaskDetail({ task, onPatch, onUpload }: { task: Task; onPatch: (patch: 
             onChange={(event) => {
               const file = event.target.files?.[0];
               if (file) void onUpload(file);
+              event.currentTarget.value = "";
             }}
           />
         </label>
@@ -462,16 +528,86 @@ function TaskDetail({ task, onPatch, onUpload }: { task: Task; onPatch: (patch: 
         {task.uploadedFiles.length === 0 ? (
           <p className="mt-2 rounded border border-dashed border-[#c9c0b3] p-4 text-sm text-[#667167]">Brak plików dla tego zadania.</p>
         ) : (
-          <div className="mt-2 grid gap-2">
+          <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {task.uploadedFiles.map((file) => (
-              <a key={file.id} className="rounded border border-[#d7d0c4] bg-[#fbfaf7] px-3 py-2 text-sm font-medium text-[#31513d] underline" href={file.url} target="_blank" rel="noreferrer">
-                {file.originalName} ({Math.round(file.size / 1024)} KB)
-              </a>
+              <FileTile key={file.id} file={file} onView={() => setViewerFile(file)} onDelete={() => onDeleteFile(file.id)} />
             ))}
           </div>
         )}
       </section>
+
+      {viewerFile && <FileViewer file={viewerFile} onClose={() => setViewerFile(null)} />}
     </article>
+  );
+}
+
+function isImage(file: FileItem) {
+  return file.mimeType.startsWith("image/");
+}
+
+function fileSize(size: number) {
+  if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function FileTile({ file, onView, onDelete }: { file: FileItem; onView: () => void; onDelete: () => void }) {
+  return (
+    <div className="overflow-hidden rounded border border-[#d7d0c4] bg-[#fbfaf7]">
+      <button onClick={onView} className="block w-full text-left">
+        {isImage(file) ? (
+          // Use the original VPS file directly; Next image optimization can re-encode evidence photos.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={file.url} alt={file.originalName} className="h-36 w-full bg-[#ede8dc] object-cover" loading="lazy" />
+        ) : (
+          <div className="grid h-36 place-items-center bg-[#ede8dc] text-[#31513d]">
+            <FileText className="h-10 w-10" />
+          </div>
+        )}
+      </button>
+      <div className="grid gap-2 p-3">
+        <button onClick={onView} className="truncate text-left text-sm font-semibold text-[#31513d]" title={file.originalName}>
+          {file.originalName}
+        </button>
+        <p className="text-xs text-[#667167]">{file.mimeType} · {fileSize(file.size)}</p>
+        <div className="flex gap-2">
+          <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-[#c9c0b3] px-2 py-2 text-xs font-semibold text-[#31513d] hover:bg-white">
+            <ExternalLink className="h-3.5 w-3.5" />
+            Pełny rozmiar
+          </a>
+          <button onClick={onDelete} className="inline-flex items-center justify-center rounded border border-[#d9b8ad] px-2 py-2 text-[#9a3727] hover:bg-[#fff3ef]" title="Usuń plik">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileViewer({ file, onClose }: { file: FileItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 grid bg-black/80 p-4">
+      <div className="flex items-center justify-between gap-3 text-white">
+        <p className="truncate text-sm font-semibold">{file.originalName}</p>
+        <div className="flex gap-2">
+          <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-sm font-semibold text-[#17201b]">
+            <ExternalLink className="h-4 w-4" />
+            Otwórz pełny rozmiar
+          </a>
+          <button onClick={onClose} className="rounded bg-white/15 p-2 hover:bg-white/25" aria-label="Zamknij podgląd">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </div>
+      <div className="mt-4 grid min-h-0 place-items-center overflow-auto">
+        {isImage(file) ? (
+          // Use the original VPS file directly; this viewer is for evidence inspection, not optimization.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={file.url} alt={file.originalName} className="max-h-full max-w-full rounded bg-white object-contain" />
+        ) : (
+          <iframe src={file.url} title={file.originalName} className="h-full min-h-[70vh] w-full rounded bg-white" />
+        )}
+      </div>
+    </div>
   );
 }
 
