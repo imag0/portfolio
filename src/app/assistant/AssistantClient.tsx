@@ -6,6 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   BadgeCheck,
+  CheckCircle2,
   CircleStop,
   Download,
   ExternalLink,
@@ -53,6 +54,7 @@ type StorageStats = {
   maxUploadMb: number;
   thumbnailSupport: boolean;
   apiPublicUrl: string;
+  directUploadPublicUrl?: string;
 };
 
 type WindowWithAudioContext = Window & {
@@ -78,6 +80,7 @@ type Task = {
   userDraft: string;
   uploadedFiles: FileItem[];
   confirmed: boolean;
+  checklistDone?: string[];
   lastAskedAt: string | null;
 };
 
@@ -99,7 +102,21 @@ function writable(task: Task) {
     || task.confirmed;
 }
 
-function matches(task: Task, query: string, officer: string, chapter: string, status: string) {
+const priorityRank: Record<Task["priority"], number> = {
+  Wysoki: 0,
+  Średni: 1,
+  Niski: 2,
+};
+
+const statusRank: Record<Task["status"], number> = Object.fromEntries(statuses.map((item, index) => [item, index])) as Record<Task["status"], number>;
+
+function sectionRank(section: string) {
+  const [chapterPart, itemPart] = section.split(".");
+  const chapterValue = chapters.indexOf(chapterPart as Task["chapter"]);
+  return (chapterValue < 0 ? 99 : chapterValue) * 100 + Number(itemPart ?? 0);
+}
+
+function matches(task: Task, query: string, officer: string, chapter: string, status: string, priority: string, sensitivity: string) {
   const haystack = [
     task.title,
     task.primaryOfficer,
@@ -116,7 +133,31 @@ function matches(task: Task, query: string, officer: string, chapter: string, st
   return (!query || haystack.includes(query.toLocaleLowerCase("pl-PL")))
     && (officer === "all" || task.primaryOfficer === officer || task.secondaryOfficer === officer)
     && (chapter === "all" || task.chapter === chapter)
-    && (status === "all" || task.status === status);
+    && (status === "all" || task.status === status)
+    && (priority === "all" || task.priority === priority)
+    && (sensitivity === "all" || task.sensitivity === sensitivity);
+}
+
+function sortTasks(tasks: Task[], sortMode: string) {
+  return [...tasks].sort((a, b) => {
+    if (sortMode === "officer") {
+      return a.primaryOfficer.localeCompare(b.primaryOfficer, "pl-PL")
+        || priorityRank[a.priority] - priorityRank[b.priority]
+        || sectionRank(a.section) - sectionRank(b.section);
+    }
+    if (sortMode === "priority") {
+      return priorityRank[a.priority] - priorityRank[b.priority]
+        || a.primaryOfficer.localeCompare(b.primaryOfficer, "pl-PL")
+        || sectionRank(a.section) - sectionRank(b.section);
+    }
+    if (sortMode === "status") {
+      return statusRank[a.status] - statusRank[b.status]
+        || priorityRank[a.priority] - priorityRank[b.priority]
+        || a.primaryOfficer.localeCompare(b.primaryOfficer, "pl-PL");
+    }
+    return sectionRank(a.section) - sectionRank(b.section)
+      || priorityRank[a.priority] - priorityRank[b.priority];
+  });
 }
 
 export function AssistantClient() {
@@ -128,6 +169,9 @@ export function AssistantClient() {
   const [officer, setOfficer] = useState("all");
   const [chapter, setChapter] = useState("all");
   const [status, setStatus] = useState("all");
+  const [priority, setPriority] = useState("all");
+  const [sensitivity, setSensitivity] = useState("all");
+  const [sortMode, setSortMode] = useState("chapter");
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState("Ładowanie zadań z VPS...");
   const [loading, setLoading] = useState(true);
@@ -206,8 +250,11 @@ export function AssistantClient() {
   }
 
   const filtered = useMemo(
-    () => tasks.filter((task) => matches(task, query, officer, chapter, status)),
-    [tasks, query, officer, chapter, status],
+    () => sortTasks(
+      tasks.filter((task) => matches(task, query, officer, chapter, status, priority, sensitivity)),
+      sortMode,
+    ),
+    [tasks, query, officer, chapter, status, priority, sensitivity, sortMode],
   );
 
   const selectedTask = tasks.find((task) => task.id === selected) ?? filtered[0] ?? null;
@@ -405,10 +452,11 @@ export function AssistantClient() {
           <Metric label="Gotowe do pisania" value={readyCount} icon={<ClipboardIcon />} />
           <Metric label="Wgrane pliki" value={fileCount} icon={<UploadCloud />} />
         </section>
+        <ChapterProgress tasks={tasks} />
 
         {storage && <StoragePanel storage={storage} onRefresh={() => void refreshStorage()} />}
 
-        <section className="mt-5 grid gap-3 rounded border border-[#d7d0c4] bg-white p-3 md:grid-cols-[2fr_repeat(3,1fr)]">
+        <section className="mt-5 grid gap-3 rounded border border-[#d7d0c4] bg-white p-3 md:grid-cols-[2fr_repeat(6,1fr)]">
           <label className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-[#667167]" />
             <input
@@ -421,6 +469,19 @@ export function AssistantClient() {
           <Select value={officer} onChange={setOfficer} options={["all", ...officers]} />
           <Select value={chapter} onChange={setChapter} options={["all", ...chapters]} />
           <Select value={status} onChange={setStatus} options={["all", ...statuses]} />
+          <Select value={priority} onChange={setPriority} options={["all", "Wysoki", "Średni", "Niski"]} />
+          <Select value={sensitivity} onChange={setSensitivity} options={["all", "safe", "ask", "notes", "confidential"]} labels={sensitivityLabels} />
+          <Select
+            value={sortMode}
+            onChange={setSortMode}
+            options={["chapter", "officer", "priority", "status"]}
+            labels={{
+              chapter: "Rozdział",
+              officer: "Oficer",
+              priority: "Priorytet",
+              status: "Status",
+            }}
+          />
         </section>
 
         <section className="mt-5 grid gap-5 lg:grid-cols-[0.9fr_1.4fr]">
@@ -486,6 +547,29 @@ function Metric({ label, value, icon }: { label: string; value: string | number;
   );
 }
 
+function ChapterProgress({ tasks }: { tasks: Task[] }) {
+  return (
+    <section className="mt-3 grid gap-3 md:grid-cols-4">
+      {chapters.map((chapter) => {
+        const chapterTasks = tasks.filter((task) => task.chapter === chapter);
+        const complete = chapterTasks.filter((task) => writable(task) || task.confirmed).length;
+        const percent = chapterTasks.length ? Math.round((complete / chapterTasks.length) * 100) : 0;
+        return (
+          <div key={chapter} className="rounded border border-[#d7d0c4] bg-white p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-semibold">Rozdział {chapter}</p>
+              <span className="text-sm text-[#667167]">{complete}/{chapterTasks.length}</span>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded bg-[#ede8dc]">
+              <div className="h-full rounded bg-[#31513d]" style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
 function StoragePanel({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
   const usedPercent = storage.diskTotalBytes ? Math.round((storage.diskUsedBytes / storage.diskTotalBytes) * 100) : 0;
   return (
@@ -511,18 +595,28 @@ function StoragePanel({ storage, onRefresh }: { storage: StorageStats; onRefresh
       <p className="mt-2 text-xs text-[#667167]">
         Dysk: {fileSize(storage.diskUsedBytes)} użyte z {fileSize(storage.diskTotalBytes)}, wolne {fileSize(storage.diskFreeBytes)}.
         {" "}Miniatury: {storage.thumbnailSupport ? "włączone" : "brak biblioteki Pillow na VPS"}.
-        {storage.apiPublicUrl ? ` Bezpośredni adres API: ${storage.apiPublicUrl}.` : " Bezpośrednie HTTPS API nie jest jeszcze skonfigurowane."}
+        {storage.directUploadPublicUrl ? ` Upload idzie bezpośrednio na VPS: ${storage.directUploadPublicUrl}.` : " Upload działa przez bezpieczny proxy endpoint."}
       </p>
     </section>
   );
 }
 
-function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+function Select({
+  value,
+  options,
+  onChange,
+  labels = {},
+}: {
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+  labels?: Record<string, string>;
+}) {
   return (
     <select className="rounded border border-[#c9c0b3] px-3 py-2" value={value} onChange={(event) => onChange(event.target.value)}>
       {options.map((option) => (
         <option key={option} value={option}>
-          {option === "all" ? "Wszystko" : option}
+          {option === "all" ? "Wszystko" : labels[option] ?? option}
         </option>
       ))}
     </select>
@@ -549,6 +643,7 @@ function TaskDetail({
   const [notes, setNotes] = useState(task.userNotes);
   const [saving, setSaving] = useState(false);
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
+  const checklistDone = task.checklistDone ?? [];
 
   useEffect(() => {
     setNotes(task.userNotes);
@@ -593,7 +688,16 @@ function TaskDetail({
           <h3 className="font-semibold">Co zrobić</h3>
           <p className="mt-2 text-sm leading-6 text-[#5f695f]">{task.taskDescription || "Brak opisu dla tego zadania."}</p>
         </section>
-        <Info title="Checklist" items={task.taskChecklist ?? []} />
+        <Checklist
+          items={task.taskChecklist ?? []}
+          checked={checklistDone}
+          onToggle={(item) => {
+            const next = checklistDone.includes(item)
+              ? checklistDone.filter((value) => value !== item)
+              : [...checklistDone, item];
+            void onPatch({ checklistDone: next });
+          }}
+        />
         <Info title="Pytania do oficera po angielsku" items={task.officerQuestions} />
         <Info title="Wymagane materiały" items={task.evidenceRequirements} />
       </div>
@@ -633,6 +737,16 @@ function TaskDetail({
           <input type="checkbox" checked={task.confirmed} onChange={(event) => void onPatch({ confirmed: event.target.checked })} />
           Potwierdzone podpisem/rangą/pieczątką
         </label>
+        <button
+          onClick={() => void onPatch({ lastAskedAt: new Date().toISOString() })}
+          className="inline-flex items-center gap-2 rounded border border-[#c9c0b3] px-4 py-2 text-sm font-semibold text-[#31513d] hover:bg-[#f7f4ec]"
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          Zapytano teraz
+        </button>
+        {task.lastAskedAt && (
+          <span className="text-xs text-[#667167]">Ostatnio pytano: {formatDate(task.lastAskedAt)}</span>
+        )}
       </div>
 
       <section className="mt-5">
@@ -995,6 +1109,15 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("pl-PL", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
 function GlobalAudioPlayer({ file, onClose }: { file: FileItem; onClose: () => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const reduceMotion = useReducedMotion();
@@ -1060,6 +1183,31 @@ function Info({ title, items }: { title: string; items: string[] }) {
       <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[#5f695f]">
         {(items.length ? items : ["Brak pozycji."]).map((item) => <li key={item}>{item}</li>)}
       </ul>
+    </section>
+  );
+}
+
+function Checklist({ items, checked, onToggle }: { items: string[]; checked: string[]; onToggle: (item: string) => void }) {
+  return (
+    <section>
+      <h3 className="font-semibold">Checklist</h3>
+      <div className="mt-2 grid gap-2 text-sm leading-6 text-[#5f695f]">
+        {(items.length ? items : ["Brak pozycji."]).map((item) => {
+          const isChecked = checked.includes(item);
+          return (
+            <label key={item} className="flex cursor-pointer items-start gap-2 rounded border border-[#e2dacf] bg-[#fbfaf7] px-3 py-2 transition hover:bg-white">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={() => onToggle(item)}
+                className="mt-1"
+                disabled={items.length === 0}
+              />
+              <span className={isChecked ? "text-[#31513d] line-through decoration-[#31513d]/50" : ""}>{item}</span>
+            </label>
+          );
+        })}
+      </div>
     </section>
   );
 }
