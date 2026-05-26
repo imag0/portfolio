@@ -2,6 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowLeft,
   BadgeCheck,
@@ -26,6 +27,11 @@ import {
 import { Mp3Encoder } from "lamejs";
 
 const unlockKey = "spr-assistant-unlocked";
+const panelMotion = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: 8 },
+};
 
 type FileItem = {
   id: string;
@@ -47,6 +53,10 @@ type StorageStats = {
   maxUploadMb: number;
   thumbnailSupport: boolean;
   apiPublicUrl: string;
+};
+
+type WindowWithAudioContext = Window & {
+  webkitAudioContext?: typeof AudioContext;
 };
 
 type Task = {
@@ -455,7 +465,9 @@ export function AssistantClient() {
           )}
         </section>
       </div>
-      <GlobalAudioPlayer file={audioFile} onClose={() => setAudioFile(null)} />
+      <AnimatePresence>
+        {audioFile && <GlobalAudioPlayer file={audioFile} onClose={() => setAudioFile(null)} />}
+      </AnimatePresence>
     </main>
   );
 }
@@ -736,11 +748,13 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef(0);
+  const reduceMotion = useReducedMotion();
   const [recording, setRecording] = useState(false);
   const [encoding, setEncoding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [preview, setPreview] = useState<{ file: File; url: string; seconds: number } | null>(null);
+  const [status, setStatus] = useState("Gotowy do nagrywania.");
   const audioFiles = task.uploadedFiles.filter(isAudio);
 
   useEffect(() => {
@@ -755,35 +769,64 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
   }, [preview]);
 
   async function startRecording() {
-    if (!navigator.mediaDevices?.getUserMedia) return;
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream);
-    recorderRef.current = recorder;
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) chunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      stream.getTracks().forEach((track) => track.stop());
-      void buildMp3();
-    };
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-    setRecording(true);
-    recorder.start(1000);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        setStatus("Ta przeglądarka nie udostępnia nagrywania mikrofonu.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      chunksRef.current = [];
+      const mimeType = getRecorderMimeType();
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setStatus("Nagrywanie przerwane przez przeglądarkę.");
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+      };
+      startedAtRef.current = Date.now();
+      setElapsed(0);
+      setStatus("Nagrywanie...");
+      setRecording(true);
+      recorder.start(250);
+    } catch {
+      setStatus("Nie udało się uzyskać dostępu do mikrofonu.");
+      setRecording(false);
+    }
   }
 
   function stopRecording() {
-    recorderRef.current?.stop();
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
     setRecording(false);
+    setStatus("Zatrzymywanie nagrania...");
+    try {
+      recorder.requestData();
+    } catch {
+      // Some browsers flush automatically on stop.
+    }
+    setTimeout(() => {
+      if (recorder.state !== "inactive") recorder.stop();
+    }, 120);
+    void finishRecording(recorder);
   }
 
-  async function buildMp3() {
+  async function finishRecording(recorder: MediaRecorder) {
     setEncoding(true);
     try {
-      const source = new Blob(chunksRef.current, { type: recorderRef.current?.mimeType || "audio/webm" });
+      const source = await waitForStoppedBlob(recorder, chunksRef.current);
+      if (source.size < 64) {
+        setStatus("Nagranie było puste. Spróbuj jeszcze raz.");
+        return;
+      }
       const buffer = await source.arrayBuffer();
-      const context = new AudioContext();
+      const AudioCtor = window.AudioContext || (window as WindowWithAudioContext).webkitAudioContext;
+      const context = new AudioCtor();
       const decoded = await context.decodeAudioData(buffer.slice(0));
       const mp3 = encodeMp3(decoded);
       await context.close();
@@ -792,7 +835,11 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
       const file = new File([mp3], `${safeTask}-notatka-glosowa-${stamp}.mp3`, { type: "audio/mpeg" });
       if (preview) URL.revokeObjectURL(preview.url);
       setPreview({ file, url: URL.createObjectURL(file), seconds: Math.round(decoded.duration) });
+      setStatus("Nagranie gotowe do odsłuchu i zapisania.");
+    } catch {
+      setStatus("Nie udało się przekonwertować nagrania do MP3. Spróbuj nagrać krócej albo odśwież stronę.");
     } finally {
+      recorder.stream.getTracks().forEach((track) => track.stop());
       setEncoding(false);
     }
   }
@@ -804,62 +851,88 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
       await onSave(preview.file);
       URL.revokeObjectURL(preview.url);
       setPreview(null);
+      setStatus("Nagranie zapisane. Możesz dodać kolejne.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <section className="grid gap-3 rounded border border-[#c9c0b3] bg-[#fbfaf7] p-3 text-sm">
+    <motion.section
+      layout
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="grid gap-3 rounded border border-[#c9c0b3] bg-[#fbfaf7] p-3 text-sm"
+    >
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold">Dyktafon MP3</h3>
         <span className="text-xs text-[#667167]">{recording ? formatTime(elapsed) : audioFiles.length ? `${audioFiles.length} nagrań` : "brak nagrań"}</span>
       </div>
+      <p className="text-xs text-[#667167]">{status}</p>
       <div className="flex flex-wrap gap-2">
         {!recording ? (
-          <button onClick={() => void startRecording()} disabled={encoding || saving} className="inline-flex items-center gap-2 rounded bg-[#31513d] px-4 py-2 font-semibold text-white hover:bg-[#263f30] disabled:opacity-60">
+          <button onClick={() => void startRecording()} disabled={encoding || saving} className="inline-flex items-center gap-2 rounded bg-[#31513d] px-4 py-2 font-semibold text-white transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#263f30] disabled:translate-y-0 disabled:opacity-60">
             <Mic className="h-4 w-4" />
             Nagrywaj
           </button>
         ) : (
-          <button onClick={stopRecording} className="inline-flex items-center gap-2 rounded bg-[#9a3727] px-4 py-2 font-semibold text-white hover:bg-[#7b2c20]">
+          <button onClick={stopRecording} className="inline-flex items-center gap-2 rounded bg-[#9a3727] px-4 py-2 font-semibold text-white transition duration-200 ease-out hover:-translate-y-0.5 hover:bg-[#7b2c20]">
             <Square className="h-4 w-4" />
             Stop
           </button>
         )}
         {encoding && <span className="inline-flex items-center gap-2 px-2 py-2 text-[#667167]"><Loader2 className="h-4 w-4 animate-spin" /> kodowanie MP3...</span>}
       </div>
-      {preview && (
-        <div className="grid gap-2 rounded border border-[#d7d0c4] bg-white p-3">
-          <p className="font-semibold">Nowe nagranie · {formatTime(preview.seconds)}</p>
-          <audio controls src={preview.url} className="w-full" />
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => void savePreview()} disabled={saving} className="rounded bg-[#31513d] px-3 py-2 font-semibold text-white disabled:opacity-60">
-              {saving ? "Zapisywanie..." : "Zapisz do zadania"}
-            </button>
-            <button
-              onClick={() => {
-                URL.revokeObjectURL(preview.url);
-                setPreview(null);
-              }}
-              className="rounded border border-[#c9c0b3] px-3 py-2 font-semibold text-[#31513d]"
-            >
-              Odrzuć
-            </button>
-          </div>
-        </div>
-      )}
-      {audioFiles.length > 0 && (
-        <div className="grid gap-2">
+      <AnimatePresence initial={false}>
+        {preview && (
+          <motion.div
+            key="preview"
+            {...panelMotion}
+            transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="grid gap-2 rounded border border-[#d7d0c4] bg-white p-3"
+          >
+            <p className="font-semibold">Nowe nagranie · {formatTime(preview.seconds)}</p>
+            <audio controls src={preview.url} className="w-full" />
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => void savePreview()} disabled={saving} className="rounded bg-[#31513d] px-3 py-2 font-semibold text-white transition duration-200 ease-out hover:bg-[#263f30] disabled:opacity-60">
+                {saving ? "Zapisywanie..." : "Zapisz do zadania"}
+              </button>
+              <button
+                onClick={() => {
+                  URL.revokeObjectURL(preview.url);
+                  setPreview(null);
+                  setStatus("Nagranie odrzucone. Możesz nagrać kolejne.");
+                }}
+                className="rounded border border-[#c9c0b3] px-3 py-2 font-semibold text-[#31513d] transition duration-200 ease-out hover:bg-[#f7f4ec]"
+              >
+                Odrzuć
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {audioFiles.length > 0 && (
+        <motion.div
+          key="recordings"
+          {...panelMotion}
+          transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+          className="grid gap-2"
+        >
           {audioFiles.map((file) => (
-            <button key={file.id} onClick={() => onPlayAudio(file)} className="flex items-center justify-between gap-2 rounded bg-white px-3 py-2 text-left text-[#31513d] hover:bg-[#f7f4ec]">
+            <motion.button
+              layout
+              key={file.id}
+              onClick={() => onPlayAudio(file)}
+              className="flex items-center justify-between gap-2 rounded bg-white px-3 py-2 text-left text-[#31513d] transition duration-200 ease-out hover:bg-[#f7f4ec]"
+            >
               <span className="truncate font-semibold">{file.originalName}</span>
               <Play className="h-4 w-4 shrink-0" />
-            </button>
+            </motion.button>
           ))}
-        </div>
-      )}
-    </section>
+        </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   );
 }
 
@@ -882,6 +955,31 @@ function encodeMp3(audioBuffer: AudioBuffer) {
   return new Blob(chunks.map((chunk) => new Uint8Array(chunk)), { type: "audio/mpeg" });
 }
 
+function getRecorderMimeType() {
+  const choices = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ];
+  return choices.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+function waitForStoppedBlob(recorder: MediaRecorder, chunks: Blob[]) {
+  return new Promise<Blob>((resolve) => {
+    const finish = () => {
+      window.setTimeout(() => {
+        resolve(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }));
+      }, 80);
+    };
+    if (recorder.state === "inactive") {
+      finish();
+      return;
+    }
+    recorder.addEventListener("stop", finish, { once: true });
+  });
+}
+
 function floatTo16Bit(input: Float32Array) {
   const output = new Int16Array(input.length);
   for (let i = 0; i < input.length; i += 1) {
@@ -897,22 +995,26 @@ function formatTime(seconds: number) {
   return `${mins}:${secs}`;
 }
 
-function GlobalAudioPlayer({ file, onClose }: { file: FileItem | null; onClose: () => void }) {
+function GlobalAudioPlayer({ file, onClose }: { file: FileItem; onClose: () => void }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const reduceMotion = useReducedMotion();
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    if (!file) return;
     const audio = audioRef.current;
     if (!audio) return;
     audio.src = file.url;
     void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
   }, [file]);
 
-  if (!file) return null;
-
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#c9c0b3] bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+      animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 18 }}
+      transition={{ duration: reduceMotion ? 0 : 0.26, ease: [0.22, 1, 0.36, 1] }}
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#c9c0b3] bg-white/95 px-3 py-2 shadow-lg backdrop-blur"
+    >
       <div className="mx-auto flex max-w-7xl items-center gap-3">
         <button
           onClick={() => {
@@ -947,7 +1049,7 @@ function GlobalAudioPlayer({ file, onClose }: { file: FileItem | null; onClose: 
           <CircleStop className="h-4 w-4" />
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
