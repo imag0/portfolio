@@ -9,7 +9,9 @@ import {
   ExternalLink,
   FileText,
   Filter,
+  HardDrive,
   Loader2,
+  RefreshCw,
   Search,
   Ship,
   Trash2,
@@ -26,6 +28,19 @@ type FileItem = {
   mimeType: string;
   size: number;
   url: string;
+  thumbnailUrl?: string | null;
+};
+
+type StorageStats = {
+  fileCount: number;
+  uploadBytes: number;
+  thumbnailBytes: number;
+  diskTotalBytes: number;
+  diskUsedBytes: number;
+  diskFreeBytes: number;
+  maxUploadMb: number;
+  thumbnailSupport: boolean;
+  apiPublicUrl: string;
 };
 
 type Task = {
@@ -103,11 +118,15 @@ export function AssistantClient() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [showTaskList, setShowTaskList] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [storage, setStorage] = useState<StorageStats | null>(null);
 
   async function load() {
     setLoading(true);
     try {
-      const response = await fetch("/api/assistant/tasks", { cache: "no-store", credentials: "include" });
+      const [response, storageResponse] = await Promise.all([
+        fetch("/api/assistant/tasks", { cache: "no-store", credentials: "include" }),
+        fetch("/api/assistant/storage", { cache: "no-store", credentials: "include" }),
+      ]);
       if (response.status === 401) {
         window.localStorage.removeItem(unlockKey);
         setUnlocked(false);
@@ -119,6 +138,7 @@ export function AssistantClient() {
       if (!response.ok) throw new Error(await response.text());
       const next = await response.json() as Task[];
       setTasks(next);
+      if (storageResponse.ok) setStorage(await storageResponse.json() as StorageStats);
       setSelected((current) => current ?? next[0]?.id ?? null);
       setMessage("Połączono z VPS. Pliki i notatki zapisują się po stronie serwera.");
     } catch (error) {
@@ -241,8 +261,10 @@ export function AssistantClient() {
         }
         const uploaded = JSON.parse(request.responseText) as FileItem;
         uploaded.url = `/api/assistant/files/${uploaded.id}`;
+        if (uploaded.thumbnailUrl) uploaded.thumbnailUrl = `/api/assistant/files/${uploaded.id}/thumbnail`;
         setTasks((current) => current.map((task) => task.id === taskId ? { ...task, uploadedFiles: [uploaded, ...task.uploadedFiles] } : task));
         setMessage(`Wgrano bez kompresji: ${uploaded.originalName}`);
+        void refreshStorage();
         resolve();
       };
       request.onerror = () => {
@@ -261,6 +283,7 @@ export function AssistantClient() {
       const response = await fetch(`/api/assistant/files/${fileId}`, { method: "DELETE", credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       setMessage("Usunięto plik z VPS.");
+      await refreshStorage();
     } catch (error) {
       setTasks(previous);
       setMessage(error instanceof Error ? error.message : "Nie udało się usunąć pliku.");
@@ -282,6 +305,11 @@ export function AssistantClient() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nie udało się pobrać eksportu Markdown.");
     }
+  }
+
+  async function refreshStorage() {
+    const response = await fetch("/api/assistant/storage", { cache: "no-store", credentials: "include" });
+    if (response.ok) setStorage(await response.json() as StorageStats);
   }
 
   if (!unlocked) {
@@ -361,6 +389,8 @@ export function AssistantClient() {
           <Metric label="Wgrane pliki" value={fileCount} icon={<UploadCloud />} />
         </section>
 
+        {storage && <StoragePanel storage={storage} onRefresh={() => void refreshStorage()} />}
+
         <section className="mt-5 grid gap-3 rounded border border-[#d7d0c4] bg-white p-3 md:grid-cols-[2fr_repeat(3,1fr)]">
           <label className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-[#667167]" />
@@ -432,6 +462,37 @@ function Metric({ label, value, icon }: { label: string; value: string | number;
       <div className="text-3xl font-semibold">{value}</div>
       <div className="text-sm text-[#667167]">{label}</div>
     </div>
+  );
+}
+
+function StoragePanel({ storage, onRefresh }: { storage: StorageStats; onRefresh: () => void }) {
+  const usedPercent = storage.diskTotalBytes ? Math.round((storage.diskUsedBytes / storage.diskTotalBytes) * 100) : 0;
+  return (
+    <section className="mt-3 rounded border border-[#d7d0c4] bg-white p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 font-semibold">
+            <HardDrive className="h-4 w-4 text-[#31513d]" />
+            Magazyn VPS
+          </h2>
+          <p className="mt-1 text-sm text-[#667167]">
+            Pliki: {storage.fileCount} · oryginały {fileSize(storage.uploadBytes)} · miniatury {fileSize(storage.thumbnailBytes)} · limit pliku {storage.maxUploadMb} MB
+          </p>
+        </div>
+        <button onClick={onRefresh} className="inline-flex items-center justify-center gap-2 rounded border border-[#c9c0b3] px-3 py-2 text-sm font-semibold text-[#31513d] hover:bg-[#f7f4ec]">
+          <RefreshCw className="h-4 w-4" />
+          Odśwież
+        </button>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded bg-[#ede8dc]">
+        <div className="h-full rounded bg-[#31513d]" style={{ width: `${Math.min(100, usedPercent)}%` }} />
+      </div>
+      <p className="mt-2 text-xs text-[#667167]">
+        Dysk: {fileSize(storage.diskUsedBytes)} użyte z {fileSize(storage.diskTotalBytes)}, wolne {fileSize(storage.diskFreeBytes)}.
+        {" "}Miniatury: {storage.thumbnailSupport ? "włączone" : "brak biblioteki Pillow na VPS"}.
+        {storage.apiPublicUrl ? ` Bezpośredni adres API: ${storage.apiPublicUrl}.` : " Bezpośrednie HTTPS API nie jest jeszcze skonfigurowane."}
+      </p>
+    </section>
   );
 }
 
@@ -580,6 +641,8 @@ function isImage(file: FileItem) {
 }
 
 function fileSize(size: number) {
+  if (size <= 0) return "0 KB";
+  if (size > 1024 * 1024 * 1024) return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
   if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
@@ -591,7 +654,7 @@ function FileTile({ file, onView, onDelete }: { file: FileItem; onView: () => vo
         {isImage(file) ? (
           // Use the original VPS file directly; Next image optimization can re-encode evidence photos.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={file.url} alt={file.originalName} className="h-36 w-full bg-[#ede8dc] object-cover" loading="lazy" />
+          <img src={file.thumbnailUrl || file.url} alt={file.originalName} className="h-36 w-full bg-[#ede8dc] object-cover" loading="lazy" />
         ) : (
           <div className="grid h-36 place-items-center bg-[#ede8dc] text-[#31513d]">
             <FileText className="h-10 w-10" />
