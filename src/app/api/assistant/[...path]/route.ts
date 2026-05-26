@@ -19,20 +19,24 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const { path } = await context.params;
   const url = new URL(request.url);
   const target = `${apiUrl.replace(/\/$/, "")}/${path.join("/")}${url.search}`;
-  const headers = new Headers(request.headers);
-  headers.delete("host");
-  headers.delete("content-length");
+  const headers = new Headers();
+  const contentType = request.headers.get("content-type");
+  const accept = request.headers.get("accept");
+  if (contentType) headers.set("content-type", contentType);
+  if (accept) headers.set("accept", accept);
   headers.set("authorization", `Bearer ${apiToken}`);
   headers.set("x-forwarded-host", request.headers.get("host") ?? url.host);
   headers.set("x-forwarded-proto", url.protocol.replace(":", ""));
   headers.set("x-forwarded-prefix", "/api/assistant");
+  const body = ["GET", "HEAD"].includes(request.method)
+    ? undefined
+    : Buffer.from(await request.arrayBuffer());
 
   const response = await fetch(target, {
     method: request.method,
     headers,
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : request.body,
-    duplex: "half",
-  } as RequestInit & { duplex: "half" });
+    body,
+  });
 
   const responseHeaders = new Headers(response.headers);
   responseHeaders.delete("content-encoding");

@@ -107,7 +107,15 @@ export function AssistantClient() {
   async function load() {
     setLoading(true);
     try {
-      const response = await fetch("/api/assistant/tasks", { cache: "no-store" });
+      const response = await fetch("/api/assistant/tasks", { cache: "no-store", credentials: "include" });
+      if (response.status === 401) {
+        window.localStorage.removeItem(unlockKey);
+        setUnlocked(false);
+        setTasks([]);
+        setSelected(null);
+        setMessage("Sesja wygasła. Zaloguj się ponownie.");
+        return;
+      }
       if (!response.ok) throw new Error(await response.text());
       const next = await response.json() as Task[];
       setTasks(next);
@@ -137,6 +145,7 @@ export function AssistantClient() {
       const response = await fetch("/api/assistant-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ username, password }),
       });
       if (!response.ok) throw new Error((await response.json()).error ?? "Nie udało się zalogować.");
@@ -178,6 +187,7 @@ export function AssistantClient() {
       const response = await fetch(`/api/assistant/tasks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(patch),
       });
       if (!response.ok) throw new Error(await response.text());
@@ -202,6 +212,7 @@ export function AssistantClient() {
       const ticket = await fetch("/api/assistant-upload-ticket", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ taskId, fileName: file.name, mimeType: file.type, size: file.size }),
       });
       if (ticket.ok) {
@@ -217,6 +228,7 @@ export function AssistantClient() {
     await new Promise<void>((resolve) => {
       const request = new XMLHttpRequest();
       request.open("POST", uploadUrl);
+      request.withCredentials = uploadUrl.startsWith("/api/");
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) setUploadProgress(Math.round((event.loaded / event.total) * 100));
       };
@@ -246,7 +258,7 @@ export function AssistantClient() {
     const previous = tasks;
     setTasks((current) => current.map((task) => task.id === taskId ? { ...task, uploadedFiles: task.uploadedFiles.filter((file) => file.id !== fileId) } : task));
     try {
-      const response = await fetch(`/api/assistant/files/${fileId}`, { method: "DELETE" });
+      const response = await fetch(`/api/assistant/files/${fileId}`, { method: "DELETE", credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       setMessage("Usunięto plik z VPS.");
     } catch (error) {
@@ -257,7 +269,7 @@ export function AssistantClient() {
 
   async function exportMarkdown() {
     try {
-      const response = await fetch("/api/assistant/export/markdown");
+      const response = await fetch("/api/assistant/export/markdown", { credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       const markdown = await response.text();
       const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
@@ -519,7 +531,11 @@ function TaskDetail({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button onClick={() => void saveText()} className="rounded bg-[#31513d] px-4 py-2 font-semibold text-white hover:bg-[#263f30]">
+        <button
+          onClick={() => void saveText()}
+          disabled={saving}
+          className="rounded bg-[#31513d] px-4 py-2 font-semibold text-white hover:bg-[#263f30] disabled:cursor-wait disabled:opacity-70"
+        >
           {saving ? "Zapisywanie..." : "Zapisz notatki"}
         </button>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded border border-[#c9c0b3] px-4 py-2 font-semibold hover:bg-[#f7f4ec]">
@@ -603,26 +619,27 @@ function FileTile({ file, onView, onDelete }: { file: FileItem; onView: () => vo
 
 function FileViewer({ file, onClose }: { file: FileItem; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 grid bg-black/80 p-4">
-      <div className="flex items-center justify-between gap-3 text-white">
-        <p className="truncate text-sm font-semibold">{file.originalName}</p>
-        <div className="flex gap-2">
-          <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded bg-white px-3 py-2 text-sm font-semibold text-[#17201b]">
+    <div className="fixed inset-0 z-50 flex h-dvh flex-col bg-black/90 p-2 sm:p-4">
+      <div className="flex min-h-0 flex-col gap-2 text-white sm:flex-row sm:items-center sm:justify-between">
+        <p className="min-w-0 truncate pr-10 text-sm font-semibold sm:pr-0">{file.originalName}</p>
+        <div className="flex shrink-0 gap-2">
+          <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex flex-1 items-center justify-center gap-2 rounded bg-white px-3 py-2 text-sm font-semibold text-[#17201b] sm:flex-none">
             <ExternalLink className="h-4 w-4" />
-            Otwórz pełny rozmiar
+            <span className="hidden sm:inline">Otwórz pełny rozmiar</span>
+            <span className="sm:hidden">Pełny</span>
           </a>
-          <button onClick={onClose} className="rounded bg-white/15 p-2 hover:bg-white/25" aria-label="Zamknij podgląd">
+          <button onClick={onClose} className="absolute right-2 top-2 rounded bg-white/15 p-2 hover:bg-white/25 sm:static" aria-label="Zamknij podgląd">
             <X className="h-5 w-5" />
           </button>
         </div>
       </div>
-      <div className="mt-4 grid min-h-0 place-items-center overflow-auto">
+      <div className="mt-3 grid min-h-0 flex-1 place-items-center overflow-auto sm:mt-4">
         {isImage(file) ? (
           // Use the original VPS file directly; this viewer is for evidence inspection, not optimization.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={file.url} alt={file.originalName} className="max-h-full max-w-full rounded bg-white object-contain" />
+          <img src={file.url} alt={file.originalName} className="max-h-[calc(100dvh-7.5rem)] max-w-full rounded bg-white object-contain sm:max-h-[calc(100dvh-6rem)]" />
         ) : (
-          <iframe src={file.url} title={file.originalName} className="h-full min-h-[70vh] w-full rounded bg-white" />
+          <iframe src={file.url} title={file.originalName} className="h-full min-h-0 w-full rounded bg-white" />
         )}
       </div>
     </div>
