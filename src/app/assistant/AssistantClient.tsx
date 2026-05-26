@@ -1,23 +1,29 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
+  CircleStop,
   Download,
   ExternalLink,
   FileText,
   Filter,
   HardDrive,
   Loader2,
+  Mic,
+  Pause,
+  Play,
   RefreshCw,
   Search,
   Ship,
+  Square,
   Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
+import { Mp3Encoder } from "lamejs";
 
 const unlockKey = "spr-assistant-unlocked";
 
@@ -119,6 +125,7 @@ export function AssistantClient() {
   const [showTaskList, setShowTaskList] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [storage, setStorage] = useState<StorageStats | null>(null);
+  const [audioFile, setAudioFile] = useState<FileItem | null>(null);
 
   async function load() {
     setLoading(true);
@@ -441,12 +448,14 @@ export function AssistantClient() {
               onPatch={(patch) => patchTask(selectedTask.id, patch)}
               onUpload={(file) => upload(selectedTask.id, file)}
               onDeleteFile={(fileId) => deleteFile(selectedTask.id, fileId)}
+              onPlayAudio={setAudioFile}
               onBack={() => setShowTaskList(true)}
               showOnMobile={!showTaskList}
             />
           )}
         </section>
       </div>
+      <GlobalAudioPlayer file={audioFile} onClose={() => setAudioFile(null)} />
     </main>
   );
 }
@@ -513,6 +522,7 @@ function TaskDetail({
   onPatch,
   onUpload,
   onDeleteFile,
+  onPlayAudio,
   onBack,
   showOnMobile,
 }: {
@@ -520,26 +530,24 @@ function TaskDetail({
   onPatch: (patch: Partial<Task>) => Promise<void>;
   onUpload: (file: File) => Promise<void>;
   onDeleteFile: (fileId: string) => Promise<void>;
+  onPlayAudio: (file: FileItem) => void;
   onBack: () => void;
   showOnMobile: boolean;
 }) {
   const [notes, setNotes] = useState(task.userNotes);
-  const [draft, setDraft] = useState(task.userDraft);
   const [saving, setSaving] = useState(false);
   const [viewerFile, setViewerFile] = useState<FileItem | null>(null);
 
   useEffect(() => {
     setNotes(task.userNotes);
-    setDraft(task.userDraft);
-  }, [task.id, task.userNotes, task.userDraft]);
+  }, [task.id, task.userNotes]);
 
   async function saveText() {
     setSaving(true);
     try {
-      await onPatch({ userNotes: notes, userDraft: draft });
+      await onPatch({ userNotes: notes });
     } catch {
       setNotes(task.userNotes);
-      setDraft(task.userDraft);
     } finally {
       setSaving(false);
     }
@@ -585,10 +593,7 @@ function TaskDetail({
           Notatki
           <textarea className="min-h-36 rounded border border-[#c9c0b3] p-3 font-normal" value={notes} onChange={(event) => setNotes(event.target.value)} />
         </label>
-        <label className="grid gap-2 text-sm font-semibold">
-          Opis własny do Worda
-          <textarea className="min-h-36 rounded border border-[#c9c0b3] p-3 font-normal" value={draft} onChange={(event) => setDraft(event.target.value)} />
-        </label>
+        <VoiceRecorder task={task} onSave={onUpload} onPlayAudio={onPlayAudio} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -625,7 +630,7 @@ function TaskDetail({
         ) : (
           <div className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {task.uploadedFiles.map((file) => (
-              <FileTile key={file.id} file={file} onView={() => setViewerFile(file)} onDelete={() => onDeleteFile(file.id)} />
+              <FileTile key={file.id} file={file} onView={() => setViewerFile(file)} onDelete={() => onDeleteFile(file.id)} onPlayAudio={() => onPlayAudio(file)} />
             ))}
           </div>
         )}
@@ -640,6 +645,10 @@ function isImage(file: FileItem) {
   return file.mimeType.startsWith("image/");
 }
 
+function isAudio(file: FileItem) {
+  return file.mimeType.startsWith("audio/");
+}
+
 function fileSize(size: number) {
   if (size <= 0) return "0 KB";
   if (size > 1024 * 1024 * 1024) return `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`;
@@ -647,14 +656,21 @@ function fileSize(size: number) {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
-function FileTile({ file, onView, onDelete }: { file: FileItem; onView: () => void; onDelete: () => void }) {
+function FileTile({ file, onView, onDelete, onPlayAudio }: { file: FileItem; onView: () => void; onDelete: () => void; onPlayAudio: () => void }) {
   return (
     <div className="overflow-hidden rounded border border-[#d7d0c4] bg-[#fbfaf7]">
-      <button onClick={onView} className="block w-full text-left">
+      <button onClick={isAudio(file) ? onPlayAudio : onView} className="block w-full text-left">
         {isImage(file) ? (
           // Use the original VPS file directly; Next image optimization can re-encode evidence photos.
           // eslint-disable-next-line @next/next/no-img-element
           <img src={file.thumbnailUrl || file.url} alt={file.originalName} className="h-36 w-full bg-[#ede8dc] object-cover" loading="lazy" />
+        ) : isAudio(file) ? (
+          <div className="grid h-36 place-items-center bg-[#ede8dc] text-[#31513d]">
+            <div className="grid place-items-center gap-2">
+              <Play className="h-10 w-10" />
+              <span className="text-xs font-semibold">Notatka głosowa MP3</span>
+            </div>
+          </div>
         ) : (
           <div className="grid h-36 place-items-center bg-[#ede8dc] text-[#31513d]">
             <FileText className="h-10 w-10" />
@@ -667,10 +683,17 @@ function FileTile({ file, onView, onDelete }: { file: FileItem; onView: () => vo
         </button>
         <p className="text-xs text-[#667167]">{file.mimeType} · {fileSize(file.size)}</p>
         <div className="flex gap-2">
-          <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-[#c9c0b3] px-2 py-2 text-xs font-semibold text-[#31513d] hover:bg-white">
-            <ExternalLink className="h-3.5 w-3.5" />
-            Pełny rozmiar
-          </a>
+          {isAudio(file) ? (
+            <button onClick={onPlayAudio} className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-[#c9c0b3] px-2 py-2 text-xs font-semibold text-[#31513d] hover:bg-white">
+              <Play className="h-3.5 w-3.5" />
+              Odtwórz
+            </button>
+          ) : (
+            <a href={file.url} target="_blank" rel="noreferrer" className="inline-flex flex-1 items-center justify-center gap-1 rounded border border-[#c9c0b3] px-2 py-2 text-xs font-semibold text-[#31513d] hover:bg-white">
+              <ExternalLink className="h-3.5 w-3.5" />
+              Pełny rozmiar
+            </a>
+          )}
           <button onClick={onDelete} className="inline-flex items-center justify-center rounded border border-[#d9b8ad] px-2 py-2 text-[#9a3727] hover:bg-[#fff3ef]" title="Usuń plik">
             <Trash2 className="h-4 w-4" />
           </button>
@@ -704,6 +727,225 @@ function FileViewer({ file, onClose }: { file: FileItem; onClose: () => void }) 
         ) : (
           <iframe src={file.url} title={file.originalName} className="h-full min-h-0 w-full rounded bg-white" />
         )}
+      </div>
+    </div>
+  );
+}
+
+function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (file: File) => Promise<void>; onPlayAudio: (file: FileItem) => void }) {
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startedAtRef = useRef(0);
+  const [recording, setRecording] = useState(false);
+  const [encoding, setEncoding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [preview, setPreview] = useState<{ file: File; url: string; seconds: number } | null>(null);
+  const audioFiles = task.uploadedFiles.filter(isAudio);
+
+  useEffect(() => {
+    if (!recording) return;
+    const timer = window.setInterval(() => setElapsed(Math.round((Date.now() - startedAtRef.current) / 1000)), 500);
+    return () => window.clearInterval(timer);
+  }, [recording]);
+
+  useEffect(() => () => {
+    if (preview) URL.revokeObjectURL(preview.url);
+    recorderRef.current?.stream.getTracks().forEach((track) => track.stop());
+  }, [preview]);
+
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream);
+    recorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      void buildMp3();
+    };
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+    setRecording(true);
+    recorder.start(1000);
+  }
+
+  function stopRecording() {
+    recorderRef.current?.stop();
+    setRecording(false);
+  }
+
+  async function buildMp3() {
+    setEncoding(true);
+    try {
+      const source = new Blob(chunksRef.current, { type: recorderRef.current?.mimeType || "audio/webm" });
+      const buffer = await source.arrayBuffer();
+      const context = new AudioContext();
+      const decoded = await context.decodeAudioData(buffer.slice(0));
+      const mp3 = encodeMp3(decoded);
+      await context.close();
+      const safeTask = task.section.replace(".", "-").toLowerCase();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const file = new File([mp3], `${safeTask}-notatka-glosowa-${stamp}.mp3`, { type: "audio/mpeg" });
+      if (preview) URL.revokeObjectURL(preview.url);
+      setPreview({ file, url: URL.createObjectURL(file), seconds: Math.round(decoded.duration) });
+    } finally {
+      setEncoding(false);
+    }
+  }
+
+  async function savePreview() {
+    if (!preview) return;
+    setSaving(true);
+    try {
+      await onSave(preview.file);
+      URL.revokeObjectURL(preview.url);
+      setPreview(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="grid gap-3 rounded border border-[#c9c0b3] bg-[#fbfaf7] p-3 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-semibold">Dyktafon MP3</h3>
+        <span className="text-xs text-[#667167]">{recording ? formatTime(elapsed) : audioFiles.length ? `${audioFiles.length} nagrań` : "brak nagrań"}</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {!recording ? (
+          <button onClick={() => void startRecording()} disabled={encoding || saving} className="inline-flex items-center gap-2 rounded bg-[#31513d] px-4 py-2 font-semibold text-white hover:bg-[#263f30] disabled:opacity-60">
+            <Mic className="h-4 w-4" />
+            Nagrywaj
+          </button>
+        ) : (
+          <button onClick={stopRecording} className="inline-flex items-center gap-2 rounded bg-[#9a3727] px-4 py-2 font-semibold text-white hover:bg-[#7b2c20]">
+            <Square className="h-4 w-4" />
+            Stop
+          </button>
+        )}
+        {encoding && <span className="inline-flex items-center gap-2 px-2 py-2 text-[#667167]"><Loader2 className="h-4 w-4 animate-spin" /> kodowanie MP3...</span>}
+      </div>
+      {preview && (
+        <div className="grid gap-2 rounded border border-[#d7d0c4] bg-white p-3">
+          <p className="font-semibold">Nowe nagranie · {formatTime(preview.seconds)}</p>
+          <audio controls src={preview.url} className="w-full" />
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => void savePreview()} disabled={saving} className="rounded bg-[#31513d] px-3 py-2 font-semibold text-white disabled:opacity-60">
+              {saving ? "Zapisywanie..." : "Zapisz do zadania"}
+            </button>
+            <button
+              onClick={() => {
+                URL.revokeObjectURL(preview.url);
+                setPreview(null);
+              }}
+              className="rounded border border-[#c9c0b3] px-3 py-2 font-semibold text-[#31513d]"
+            >
+              Odrzuć
+            </button>
+          </div>
+        </div>
+      )}
+      {audioFiles.length > 0 && (
+        <div className="grid gap-2">
+          {audioFiles.map((file) => (
+            <button key={file.id} onClick={() => onPlayAudio(file)} className="flex items-center justify-between gap-2 rounded bg-white px-3 py-2 text-left text-[#31513d] hover:bg-[#f7f4ec]">
+              <span className="truncate font-semibold">{file.originalName}</span>
+              <Play className="h-4 w-4 shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function encodeMp3(audioBuffer: AudioBuffer) {
+  const channels = Math.min(2, audioBuffer.numberOfChannels);
+  const sampleRate = audioBuffer.sampleRate;
+  const encoder = new Mp3Encoder(channels, sampleRate, 96);
+  const blockSize = 1152;
+  const chunks: Int8Array[] = [];
+  const left = floatTo16Bit(audioBuffer.getChannelData(0));
+  const right = channels > 1 ? floatTo16Bit(audioBuffer.getChannelData(1)) : undefined;
+  for (let offset = 0; offset < left.length; offset += blockSize) {
+    const leftChunk = left.subarray(offset, offset + blockSize);
+    const rightChunk = right?.subarray(offset, offset + blockSize);
+    const encoded = encoder.encodeBuffer(leftChunk, rightChunk);
+    if (encoded.length) chunks.push(encoded);
+  }
+  const flushed = encoder.flush();
+  if (flushed.length) chunks.push(flushed);
+  return new Blob(chunks.map((chunk) => new Uint8Array(chunk)), { type: "audio/mpeg" });
+}
+
+function floatTo16Bit(input: Float32Array) {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    const value = Math.max(-1, Math.min(1, input[i] ?? 0));
+    output[i] = value < 0 ? value * 0x8000 : value * 0x7fff;
+  }
+  return output;
+}
+
+function formatTime(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = String(seconds % 60).padStart(2, "0");
+  return `${mins}:${secs}`;
+}
+
+function GlobalAudioPlayer({ file, onClose }: { file: FileItem | null; onClose: () => void }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!file) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.src = file.url;
+    void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+  }, [file]);
+
+  if (!file) return null;
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-[#c9c0b3] bg-white/95 px-3 py-2 shadow-lg backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center gap-3">
+        <button
+          onClick={() => {
+            const audio = audioRef.current;
+            if (!audio) return;
+            if (audio.paused) void audio.play().then(() => setPlaying(true));
+            else {
+              audio.pause();
+              setPlaying(false);
+            }
+          }}
+          className="rounded bg-[#31513d] p-2 text-white"
+          aria-label={playing ? "Pauza" : "Odtwórz"}
+        >
+          {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[#31513d]">{file.originalName}</p>
+          <audio ref={audioRef} controls className="mt-1 h-8 w-full" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
+        </div>
+        <a href={file.url} target="_blank" rel="noreferrer" className="hidden rounded border border-[#c9c0b3] px-3 py-2 text-xs font-semibold text-[#31513d] sm:inline-flex">
+          Plik
+        </a>
+        <button
+          onClick={() => {
+            audioRef.current?.pause();
+            onClose();
+          }}
+          className="rounded border border-[#c9c0b3] p-2 text-[#31513d]"
+          aria-label="Zamknij odtwarzacz"
+        >
+          <CircleStop className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );
