@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { hasAssistantSession } from "../../assistant-auth";
 
-const apiUrl = process.env.SPR_API_URL ?? "http://yasmin208.mikrus.xyz:20208";
+const apiUrl = process.env.SPR_API_URL ?? "https://api.echlon.dev:20208";
 const apiToken = process.env.SPR_API_TOKEN;
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
