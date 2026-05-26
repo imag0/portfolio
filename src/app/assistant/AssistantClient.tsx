@@ -794,7 +794,7 @@ function FileTile({ file, onView, onDelete, onPlayAudio }: { file: FileItem; onV
           <div className="grid h-36 place-items-center bg-[#ede8dc] text-[#31513d]">
             <div className="grid place-items-center gap-2">
               <Play className="h-10 w-10" />
-              <span className="text-xs font-semibold">Notatka głosowa MP3</span>
+              <span className="text-xs font-semibold">Notatka głosowa</span>
             </div>
           </div>
         ) : (
@@ -867,7 +867,7 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
   const [encoding, setEncoding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [preview, setPreview] = useState<{ file: File; url: string; seconds: number } | null>(null);
+  const [preview, setPreview] = useState<{ file: File; url: string; seconds: number; convertedToMp3: boolean } | null>(null);
   const [status, setStatus] = useState("Gotowy do nagrywania.");
   const audioFiles = task.uploadedFiles.filter(isAudio);
 
@@ -938,20 +938,13 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
         setStatus("Nagranie było puste. Spróbuj jeszcze raz.");
         return;
       }
-      const buffer = await source.arrayBuffer();
-      const AudioCtor = window.AudioContext || (window as WindowWithAudioContext).webkitAudioContext;
-      const context = new AudioCtor();
-      const decoded = await context.decodeAudioData(buffer.slice(0));
-      const mp3 = encodeMp3(decoded);
-      await context.close();
-      const safeTask = task.section.replace(".", "-").toLowerCase();
-      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const file = new File([mp3], `${safeTask}-notatka-glosowa-${stamp}.mp3`, { type: "audio/mpeg" });
+      const fallbackSeconds = Math.max(1, Math.round((Date.now() - startedAtRef.current) / 1000));
+      const result = await buildRecordingFile(source, task, fallbackSeconds);
       if (preview) URL.revokeObjectURL(preview.url);
-      setPreview({ file, url: URL.createObjectURL(file), seconds: Math.round(decoded.duration) });
-      setStatus("Nagranie gotowe do odsłuchu i zapisania.");
+      setPreview({ file: result.file, url: URL.createObjectURL(result.file), seconds: result.seconds, convertedToMp3: result.convertedToMp3 });
+      setStatus(result.convertedToMp3 ? "Nagranie MP3 gotowe do odsłuchu i zapisania." : "Nagranie gotowe do zapisu w formacie z przeglądarki.");
     } catch {
-      setStatus("Nie udało się przekonwertować nagrania do MP3. Spróbuj nagrać krócej albo odśwież stronę.");
+      setStatus("Nie udało się przygotować nagrania. Sprawdź zgodę na mikrofon i spróbuj jeszcze raz.");
     } finally {
       recorder.stream.getTracks().forEach((track) => track.stop());
       setEncoding(false);
@@ -1004,7 +997,9 @@ function VoiceRecorder({ task, onSave, onPlayAudio }: { task: Task; onSave: (fil
             transition={reduceMotion ? { duration: 0 } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             className="grid gap-2 rounded border border-[#d7d0c4] bg-white p-3"
           >
-            <p className="font-semibold">Nowe nagranie · {formatTime(preview.seconds)}</p>
+            <p className="font-semibold">
+              Nowe nagranie · {formatTime(preview.seconds)} · {preview.convertedToMp3 ? "MP3" : recordingFormatLabel(preview.file.type)}
+            </p>
             <audio controls src={preview.url} className="w-full" />
             <div className="flex flex-wrap gap-2">
               <button onClick={() => void savePreview()} disabled={saving} className="rounded bg-[#31513d] px-3 py-2 font-semibold text-white transition duration-200 ease-out hover:bg-[#263f30] disabled:opacity-60">
@@ -1067,6 +1062,56 @@ function encodeMp3(audioBuffer: AudioBuffer) {
   const flushed = encoder.flush();
   if (flushed.length) chunks.push(flushed);
   return new Blob(chunks.map((chunk) => new Uint8Array(chunk)), { type: "audio/mpeg" });
+}
+
+async function buildRecordingFile(source: Blob, task: Task, fallbackSeconds: number) {
+  const safeTask = task.section.replace(".", "-").toLowerCase();
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const fallbackType = baseMimeType(source.type || "audio/webm");
+  const fallbackExtension = extensionForAudioType(fallbackType);
+
+  try {
+    const buffer = await source.arrayBuffer();
+    const AudioCtor = window.AudioContext || (window as WindowWithAudioContext).webkitAudioContext;
+    const context = new AudioCtor();
+    try {
+      const decoded = await context.decodeAudioData(buffer.slice(0));
+      const mp3 = encodeMp3(decoded);
+      return {
+        file: new File([mp3], `${safeTask}-notatka-glosowa-${stamp}.mp3`, { type: "audio/mpeg" }),
+        seconds: Math.max(1, Math.round(decoded.duration)),
+        convertedToMp3: true,
+      };
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  } catch {
+    return {
+      file: new File([source], `${safeTask}-notatka-glosowa-${stamp}.${fallbackExtension}`, { type: fallbackType }),
+      seconds: fallbackSeconds,
+      convertedToMp3: false,
+    };
+  }
+}
+
+function extensionForAudioType(type: string) {
+  if (type.includes("mp4")) return "m4a";
+  if (type.includes("mpeg") || type.includes("mp3")) return "mp3";
+  if (type.includes("ogg")) return "ogg";
+  if (type.includes("wav")) return "wav";
+  return "webm";
+}
+
+function baseMimeType(type: string) {
+  return type.split(";")[0]?.trim() || type;
+}
+
+function recordingFormatLabel(type: string) {
+  if (type.includes("mp4")) return "M4A";
+  if (type.includes("webm")) return "WebM";
+  if (type.includes("ogg")) return "OGG";
+  if (type.includes("wav")) return "WAV";
+  return "audio";
 }
 
 function getRecorderMimeType() {
