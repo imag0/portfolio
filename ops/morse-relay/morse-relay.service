@@ -1,0 +1,16 @@
+[Unit]
+Description=MorseChat relay
+After=network.target
+
+[Service]
+Type=simple
+Environment=MORSE_RELAY_HOST=127.0.0.1
+Environment=MORSE_RELAY_PORT=20210
+Environment=MORSE_RELAY_DB=/var/lib/morse-relay/messages.db
+Environment=MORSE_RELAY_ORIGIN=*
+ExecStart=/usr/bin/python3 /opt/morse-relay/morse_relay.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

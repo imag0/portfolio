@@ -90,6 +90,9 @@ export default function Home() {
                 <a href="/assistant" className="px-6 py-3 border border-[#c8c0a822] text-[#c8c0a8]/75 hover:border-[#c8c0a8] hover:text-[#c8c0a8] transition-all rounded-sm uppercase tracking-widest font-bold">
                   Assistant
                 </a>
+                <a href="/morse" className="px-6 py-3 border border-[#00F0FF]/30 text-[#00F0FF]/80 hover:border-[#00F0FF] hover:text-[#00F0FF] transition-all rounded-sm uppercase tracking-widest font-bold">
+                  Morse
+                </a>
               </motion.div>
             </motion.div>
           </section>
@@ -154,10 +157,10 @@ export default function Home() {
               <span className="opacity-50">All Rights Reserved</span>
             </p>
             <a
-              href="/assistant"
+              href="/morse"
               className="mt-4 md:mt-0 hover:text-[#c8c0a8] transition-colors relative group"
             >
-              asystent praktyki morskiej
+              morsechat signal station
               <div className="absolute bottom-0 left-0 w-full h-[1px] bg-[#c8c0a8] origin-left scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </a>
           </footer>
