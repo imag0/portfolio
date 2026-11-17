@@ -13,6 +13,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://echlon.dev"),
   title: "Echlon • Industrial Strength Chaos",
   description: "Building the future, one useful commit at a time",
 };
