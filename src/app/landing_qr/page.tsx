@@ -386,7 +386,7 @@ export default function LandingQR() {
 
           {/* Entry */}
           <div className="entry">
-            <a href="https://t.me/echlon_bot" target="_blank" rel="noopener">
+            <a href="/navsight">
               <span>proceed</span>
               <span className="arrow">→</span>
             </a>
